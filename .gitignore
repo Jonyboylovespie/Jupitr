@@ -1,0 +1,25 @@
+## .NET build outputs
+bin/
+obj/
+publish/
+
+## Visual Studio / VS Code
+.vs/
+.vscode/
+*.user
+*.suo
+
+## NuGet
+*.nupkg
+packages/
+
+## OS files
+.DS_Store
+Thumbs.db
+
+## Logs
+*.log
+
+## Temporary files
+*.tmp
+*.temp
