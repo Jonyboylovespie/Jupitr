@@ -17,7 +17,6 @@ public partial class PopupForm : Form
     private Button _btnSettings = null!;
     private System.Windows.Forms.Timer _updateTimer = null!;
 
-    // Cache to avoid rebuilding UI every second
     private List<ScheduleItem>? _lastItems;
     private string? _lastDayType;
 
@@ -162,7 +161,7 @@ public partial class PopupForm : Form
         if (Visible)
         {
             _updateTimer?.Start();
-            _lastItems = null; // Force rebuild on show
+            _lastItems = null;
             RefreshData();
         }
         else
@@ -190,11 +189,9 @@ public partial class PopupForm : Form
 
         var (current, remaining, index) = BellSchedule.GetCurrentBlock(nowTs, _dayType);
 
-        // Update timer text (no flashing - just label text changes)
         UpdateMainTimer(nowTs, blocks, current, remaining, index, lunchInfo);
 
-        // Build schedule list only if structure changed (day type or lunch config changed)
-        var newItems = BuildScheduleItems(blocks, lunchInfo, lunchWave);
+        var newItems = BuildScheduleItems(blocks, lunchInfo, lunchWave, dayLetter);
         bool needsRebuild = _lastItems == null || _lastDayType != _dayType || !ItemsEqual(_lastItems, newItems);
 
         if (needsRebuild)
@@ -203,13 +200,11 @@ public partial class PopupForm : Form
             _lastItems = newItems;
             _lastDayType = _dayType;
 
-            // Resize form to fit content
             int contentHeight = _scheduleFlow.Bottom + 20;
             Size = new Size(380, Math.Min(contentHeight, 520));
         }
         else
         {
-            // Just update highlight on existing controls
             UpdateHighlights(newItems, nowTs);
         }
     }
@@ -218,6 +213,27 @@ public partial class PopupForm : Form
     {
         if (current != null)
         {
+            // Check if currently in a mini (only if class is configured with "/")
+            var dayLetter = ExtractDayLetter(_dayType);
+            var configIndex = GetConfigBlockIndex(index, _dayType);
+            var rawClass = configIndex.HasValue && dayLetter != null
+                ? _config.GetClass(dayLetter, configIndex.Value)
+                : null;
+            bool hasMinis = !string.IsNullOrWhiteSpace(rawClass) && rawClass.Contains('/');
+
+            var miniInfo = BellSchedule.GetCurrentMini(now, _dayType);
+            if (miniInfo.HasValue && hasMinis)
+            {
+                var (mini, miniRemaining) = miniInfo.Value;
+                var miniClass = GetMiniClassName(rawClass, mini!.Name);
+                var display = string.IsNullOrWhiteSpace(miniClass) ? mini.Name : miniClass;
+
+                _lblTimer.Text = BellSchedule.FormatRemaining(miniRemaining);
+                _lblTimer.ForeColor = miniRemaining.TotalMinutes < 5 ? JupiterTheme.Yellow : JupiterTheme.Orange;
+                _lblSubtitle.Text = $"Current: {display} ({mini.Name}) — ends {BellSchedule.FormatTime(mini.End)}";
+                return;
+            }
+
             if (lunch != null && now >= lunch.Start && now < lunch.End)
             {
                 var lunchRemaining = lunch.End - now;
@@ -239,13 +255,8 @@ public partial class PopupForm : Form
             _lblTimer.Text = BellSchedule.FormatRemaining(remaining);
             _lblTimer.ForeColor = remaining.TotalMinutes < 5 ? JupiterTheme.Yellow : JupiterTheme.Orange;
 
-            var dayLetter = ExtractDayLetter(_dayType);
-            var configIndex = GetConfigBlockIndex(index, _dayType);
-            var className = configIndex.HasValue && dayLetter != null
-                ? _config.GetClass(dayLetter, configIndex.Value)
-                : null;
-            var display = string.IsNullOrWhiteSpace(className) ? current.Name : className;
-            _lblSubtitle.Text = $"Current: {display} — ends {BellSchedule.FormatTime(current.End)}";
+            var disp = FormatClassForDisplay(rawClass) ?? current.Name;
+            _lblSubtitle.Text = $"Current: {disp} — ends {BellSchedule.FormatTime(current.End)}";
         }
         else if (lunch != null && now >= lunch.Start && now < lunch.End)
         {
@@ -261,20 +272,6 @@ public partial class PopupForm : Form
             _lblTimer.ForeColor = JupiterTheme.Muted;
             _lblSubtitle.Text = $"{blocks[0].Name} starts at {BellSchedule.FormatTime(blocks[0].Start)}";
         }
-        else if (lunch != null && now >= lunch.End && now < blocks[^1].End)
-        {
-            foreach (var b in blocks)
-            {
-                if (now < b.End)
-                {
-                    var untilEnd = b.End - now;
-                    _lblTimer.Text = BellSchedule.FormatRemaining(untilEnd);
-                    _lblTimer.ForeColor = JupiterTheme.Orange;
-                    _lblSubtitle.Text = $"Back to {b.Name} — ends {BellSchedule.FormatTime(b.End)}";
-                    break;
-                }
-            }
-        }
         else
         {
             _lblTimer.Text = "Done";
@@ -283,48 +280,55 @@ public partial class PopupForm : Form
         }
     }
 
-    private List<ScheduleItem> BuildScheduleItems(BellSchedule.TimeBlock[] blocks, BellSchedule.LunchInfo? lunchInfo, int? lunchWave)
+    private List<ScheduleItem> BuildScheduleItems(BellSchedule.TimeBlock[] blocks, BellSchedule.LunchInfo? lunchInfo, int? lunchWave, string? dayLetter)
     {
         var items = new List<ScheduleItem>();
+        bool isAdvisory = _dayType.Contains("Advisory", StringComparison.OrdinalIgnoreCase);
 
         for (int i = 0; i < blocks.Length; i++)
         {
             var b = blocks[i];
-            bool isAdvisory = b.Name.Contains("Advisory", StringComparison.OrdinalIgnoreCase);
+            bool isAdvisoryBlock = b.Name.Contains("Advisory", StringComparison.OrdinalIgnoreCase);
 
-            if (lunchInfo != null && !isAdvisory &&
-                lunchInfo.Start > b.Start && lunchInfo.End < b.End)
+            // Check if this block has minis configured
+            var configIndex = GetConfigBlockIndex(i, _dayType);
+            string? rawClass = null;
+            bool hasMinis = false;
+            if (configIndex.HasValue && dayLetter != null)
             {
-                items.Add(new ScheduleItem(b.Start, lunchInfo.Start, b.Name, i, false, false));
-                items.Add(new ScheduleItem(lunchInfo.Start, lunchInfo.End, $"Lunch Wave {lunchWave}", -1, true, false));
-                items.Add(new ScheduleItem(lunchInfo.End, b.End, b.Name, i, false, true));
+                rawClass = _config.GetClass(dayLetter, configIndex.Value);
+                hasMinis = !string.IsNullOrWhiteSpace(rawClass) && rawClass.Contains('/');
+            }
+
+            if (!isAdvisoryBlock && hasMinis)
+            {
+                var minis = BellSchedule.GetMinisForBlock(configIndex!.Value, isAdvisory);
+                if (minis != null)
+                {
+                    var parts = rawClass!.Split('/', 2);
+                    var m1Class = parts[0].Trim();
+                    var m2Class = parts[1].Trim();
+
+                    items.Add(new ScheduleItem(minis[0].Start, minis[0].End, $"{b.Name} ({minis[0].Name})", i, false, false, m1Class));
+                    items.Add(new ScheduleItem(minis[1].Start, minis[1].End, $"{b.Name} ({minis[1].Name})", i, false, false, m2Class));
+                }
+                else
+                {
+                    items.Add(new ScheduleItem(b.Start, b.End, b.Name, i, false, false, rawClass));
+                }
             }
             else
             {
-                items.Add(new ScheduleItem(b.Start, b.End, b.Name, i, false, false));
-
-                if (lunchInfo != null && b.End <= lunchInfo.Start)
-                {
-                    if (i + 1 < blocks.Length)
-                    {
-                        if (lunchInfo.Start < blocks[i + 1].Start && lunchInfo.End <= blocks[i + 1].Start)
-                        {
-                            items.Add(new ScheduleItem(lunchInfo.Start, lunchInfo.End, $"Lunch Wave {lunchWave}", -1, true, false));
-                        }
-                    }
-                    else if (i == blocks.Length - 1)
-                    {
-                        items.Add(new ScheduleItem(lunchInfo.Start, lunchInfo.End, $"Lunch Wave {lunchWave}", -1, true, false));
-                    }
-                }
+                items.Add(new ScheduleItem(b.Start, b.End, b.Name, i, false, false, rawClass));
             }
         }
 
-        if (lunchInfo != null && !items.Any(item => item.IsLunch))
+        // Insert lunch chronologically
+        if (lunchInfo != null)
         {
             int insertIdx = items.FindIndex(item => item.Start > lunchInfo.Start);
             if (insertIdx == -1) insertIdx = items.Count;
-            items.Insert(insertIdx, new ScheduleItem(lunchInfo.Start, lunchInfo.End, $"Lunch Wave {lunchWave}", -1, true, false));
+            items.Insert(insertIdx, new ScheduleItem(lunchInfo.Start, lunchInfo.End, $"Lunch Wave {lunchWave}", -1, true, false, null));
         }
 
         return items;
@@ -342,15 +346,7 @@ public partial class PopupForm : Form
             bool isAdvisory = item.Name.Contains("Advisory", StringComparison.OrdinalIgnoreCase);
             bool isAfterLunch = item.IsAfterLunch;
 
-            string? className = null;
-            if (!item.IsLunch && !isAdvisory)
-            {
-                var configIndex = GetConfigBlockIndex(item.BlockIndex, _dayType);
-                if (configIndex.HasValue && dayLetter != null)
-                    className = _config.GetClass(dayLetter, configIndex.Value);
-            }
-
-            var row = CreateScheduleRow(item, isCurrent, isAdvisory, isAfterLunch, className, i % 2 == 0);
+            var row = CreateScheduleRow(item, isCurrent, isAdvisory, isAfterLunch, i % 2 == 0);
             _scheduleFlow.Controls.Add(row);
         }
 
@@ -372,7 +368,6 @@ public partial class PopupForm : Form
             if (row.BackColor != targetBg)
                 row.BackColor = targetBg;
 
-            // Toggle accent bar
             bool hasAccent = row.Controls.Count > 0 && row.Controls[0] is Panel p && p.Dock == DockStyle.Left && p.Width == 3;
             if (isCurrent && !hasAccent)
             {
@@ -387,7 +382,6 @@ public partial class PopupForm : Form
                     row.Controls.RemoveAt(0);
             }
 
-            // Update bold font on name label (second control after possible accent)
             int labelIdx = hasAccent ? 1 : 0;
             if (labelIdx < row.Controls.Count && row.Controls[labelIdx] is Label lblName)
             {
@@ -398,7 +392,7 @@ public partial class PopupForm : Form
         }
     }
 
-    private Panel CreateScheduleRow(ScheduleItem item, bool isCurrent, bool isAdvisory, bool isAfterLunch, string? className, bool evenRow)
+    private Panel CreateScheduleRow(ScheduleItem item, bool isCurrent, bool isAdvisory, bool isAfterLunch, bool evenRow)
     {
         int rowHeight = item.IsLunch ? 28 : 36;
         var row = new Panel
@@ -423,7 +417,7 @@ public partial class PopupForm : Form
 
         var lblName = new Label
         {
-            Text = item.IsLunch ? item.Name : (isAfterLunch ? item.Name + " (cont.)" : item.Name),
+            Text = item.IsLunch ? item.Name : item.Name,
             Font = isCurrent ? JupiterTheme.FontBlock : JupiterTheme.FontSmall,
             ForeColor = item.IsLunch ? JupiterTheme.Yellow : (isAdvisory ? JupiterTheme.Muted : (isCurrent ? JupiterTheme.Cream : JupiterTheme.Muted)),
             AutoSize = true,
@@ -441,11 +435,11 @@ public partial class PopupForm : Form
         };
         row.Controls.Add(lblTime);
 
-        if (!item.IsLunch && !isAdvisory && !string.IsNullOrWhiteSpace(className))
+        if (!item.IsLunch && !isAdvisory && !string.IsNullOrWhiteSpace(item.MiniClassName))
         {
             var lblClass = new Label
             {
-                Text = className,
+                Text = item.MiniClassName,
                 Font = JupiterTheme.FontSmall,
                 ForeColor = isCurrent ? JupiterTheme.Yellow : JupiterTheme.Cream,
                 AutoSize = true,
@@ -457,18 +451,43 @@ public partial class PopupForm : Form
         return row;
     }
 
+    private static string? GetMiniClassName(string? rawName, string miniLabel)
+    {
+        if (string.IsNullOrWhiteSpace(rawName)) return null;
+        if (!rawName.Contains('/')) return rawName;
+        var parts = rawName.Split('/', 2);
+        var m1 = parts[0].Trim();
+        var m2 = parts[1].Trim();
+        if (miniLabel == "M1") return string.IsNullOrWhiteSpace(m1) ? null : m1;
+        if (miniLabel == "M2") return string.IsNullOrWhiteSpace(m2) ? null : m2;
+        return null;
+    }
+
+    private static string? FormatClassForDisplay(string? rawName)
+    {
+        if (string.IsNullOrWhiteSpace(rawName)) return null;
+        if (!rawName.Contains('/')) return rawName;
+        var parts = rawName.Split('/', 2);
+        var m1 = parts[0].Trim();
+        var m2 = parts[1].Trim();
+        if (string.IsNullOrWhiteSpace(m1) && string.IsNullOrWhiteSpace(m2)) return "—";
+        if (string.IsNullOrWhiteSpace(m1)) return $"M2: {m2}";
+        if (string.IsNullOrWhiteSpace(m2)) return $"M1: {m1}";
+        return $"{m1} · {m2}";
+    }
+
     private static bool ItemsEqual(List<ScheduleItem> a, List<ScheduleItem> b)
     {
         if (a.Count != b.Count) return false;
         for (int i = 0; i < a.Count; i++)
         {
-            if (a[i].Name != b[i].Name || a[i].Start != b[i].Start || a[i].End != b[i].End || a[i].IsLunch != b[i].IsLunch)
+            if (a[i].Name != b[i].Name || a[i].Start != b[i].Start || a[i].End != b[i].End || a[i].IsLunch != b[i].IsLunch || a[i].MiniClassName != b[i].MiniClassName)
                 return false;
         }
         return true;
     }
 
-    private record ScheduleItem(TimeSpan Start, TimeSpan End, string Name, int BlockIndex, bool IsLunch, bool IsAfterLunch);
+    private record ScheduleItem(TimeSpan Start, TimeSpan End, string Name, int BlockIndex, bool IsLunch, bool IsAfterLunch, string? MiniClassName);
 
     private static int? GetConfigBlockIndex(int appBlockIndex, string dayType)
     {

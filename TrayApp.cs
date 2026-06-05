@@ -69,6 +69,25 @@ public class TrayApp : ApplicationContext
             _popup = new PopupForm(_config, ShowSettingsForm);
         }
 
+        // If the date has changed since we last checked, refresh the day type
+        // so the schedule stays accurate when the laptop is left running overnight.
+        var now = DateTime.Now;
+        if (_lastCheckedDate != now.Date)
+        {
+            _ = Task.Run(async () =>
+            {
+                var dayType = await _scraper.GetDayTypeAsync(now);
+                _currentDayType = dayType ?? "Unknown";
+                _lastCheckedDate = now.Date;
+
+                _uiContext.Post(_ =>
+                {
+                    _popup?.SetDayType(_currentDayType);
+                    _popup?.RefreshData();
+                }, null);
+            });
+        }
+
         _popup.SetDayType(_currentDayType);
         _popup.RefreshData();
 
