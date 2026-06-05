@@ -213,7 +213,6 @@ public partial class PopupForm : Form
     {
         if (current != null)
         {
-            // Check if currently in a mini (only if class is configured with "/")
             var dayLetter = ExtractDayLetter(_dayType);
             var configIndex = GetConfigBlockIndex(index, _dayType);
             var rawClass = configIndex.HasValue && dayLetter != null
@@ -290,7 +289,6 @@ public partial class PopupForm : Form
             var b = blocks[i];
             bool isAdvisoryBlock = b.Name.Contains("Advisory", StringComparison.OrdinalIgnoreCase);
 
-            // Check if this block has minis configured
             var configIndex = GetConfigBlockIndex(i, _dayType);
             string? rawClass = null;
             bool hasMinis = false;
@@ -300,6 +298,57 @@ public partial class PopupForm : Form
                 hasMinis = !string.IsNullOrWhiteSpace(rawClass) && rawClass.Contains('/');
             }
 
+            // Check if lunch falls inside this block (not after it)
+            bool lunchInsideBlock = lunchInfo != null && !isAdvisoryBlock &&
+                lunchInfo.Start > b.Start && lunchInfo.End < b.End;
+
+            if (lunchInsideBlock && lunchInfo != null)
+            {
+                var li = lunchInfo;
+                var preLunchItems = new List<ScheduleItem>();
+                var postLunchItems = new List<ScheduleItem>();
+
+                if (!isAdvisoryBlock && hasMinis)
+                {
+                    var minis = BellSchedule.GetMinisForBlock(configIndex!.Value, isAdvisory);
+                    if (minis != null)
+                    {
+                        var parts = rawClass!.Split('/', 2);
+                        var m1Class = parts[0].Trim();
+                        var m2Class = parts[1].Trim();
+
+                        foreach (var mini in minis)
+                        {
+                            if (mini.End <= li.Start)
+                            {
+                                preLunchItems.Add(new ScheduleItem(mini.Start, mini.End, $"{b.Name} ({mini.Name})", i, false, false, mini.Name == "M1" ? m1Class : m2Class));
+                            }
+                            else if (mini.Start >= li.End)
+                            {
+                                postLunchItems.Add(new ScheduleItem(mini.Start, mini.End, $"{b.Name} ({mini.Name})", i, false, true, mini.Name == "M1" ? m1Class : m2Class));
+                            }
+                        }
+                    }
+                    else
+                    {
+                        preLunchItems.Add(new ScheduleItem(b.Start, li.Start, b.Name, i, false, false, rawClass));
+                        postLunchItems.Add(new ScheduleItem(li.End, b.End, b.Name, i, false, true, rawClass));
+                    }
+                }
+                else
+                {
+                    preLunchItems.Add(new ScheduleItem(b.Start, li.Start, b.Name, i, false, false, rawClass));
+                    postLunchItems.Add(new ScheduleItem(li.End, b.End, b.Name, i, false, true, rawClass));
+                }
+
+                // Add items in correct order: pre-lunch → lunch → post-lunch
+                items.AddRange(preLunchItems);
+                items.Add(new ScheduleItem(li.Start, li.End, $"Lunch Wave {lunchWave}", -1, true, false, null));
+                items.AddRange(postLunchItems);
+                continue; // Skip normal block handling
+            }
+
+            // Normal block handling (no lunch inside)
             if (!isAdvisoryBlock && hasMinis)
             {
                 var minis = BellSchedule.GetMinisForBlock(configIndex!.Value, isAdvisory);
@@ -323,8 +372,8 @@ public partial class PopupForm : Form
             }
         }
 
-        // Insert lunch chronologically
-        if (lunchInfo != null)
+        // Insert lunch for cases where it falls between blocks (not inside)
+        if (lunchInfo != null && !items.Any(item => item.IsLunch))
         {
             int insertIdx = items.FindIndex(item => item.Start > lunchInfo.Start);
             if (insertIdx == -1) insertIdx = items.Count;
@@ -417,7 +466,7 @@ public partial class PopupForm : Form
 
         var lblName = new Label
         {
-            Text = item.IsLunch ? item.Name : item.Name,
+            Text = item.IsLunch ? item.Name : (isAfterLunch ? item.Name + " (cont.)" : item.Name),
             Font = isCurrent ? JupiterTheme.FontBlock : JupiterTheme.FontSmall,
             ForeColor = item.IsLunch ? JupiterTheme.Yellow : (isAdvisory ? JupiterTheme.Muted : (isCurrent ? JupiterTheme.Cream : JupiterTheme.Muted)),
             AutoSize = true,
