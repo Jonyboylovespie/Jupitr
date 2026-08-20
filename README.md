@@ -51,7 +51,3 @@ shared/assets/           branding and icons
 shared/test-data/        offline parser fixtures
 docs/                    platform and architecture notes
 ```
-
-## Releases
-
-Jupitr uses one semantic version for both platforms. A GitHub release can publish separate Windows and Linux artifacts, for example `Jupitr-Windows-x64.zip` and `Jupitr-Linux-x86_64.tar.gz`.
