@@ -17,6 +17,9 @@ find_library(XCB_LIBRARY xcb PATH_SUFFIXES lib64 lib)
 if(NOT XCB_LIBRARY)
     find_file(XCB_LIBRARY libxcb.so.1 PATHS /usr/lib64 /lib64 /usr/lib /lib REQUIRED)
 endif()
+find_path(KSTATUSNOTIFIERITEM_INCLUDE_DIR KStatusNotifierItem
+          PATH_SUFFIXES KF6/KStatusNotifierItem)
+find_library(KSTATUSNOTIFIERITEM_LIBRARY KF6StatusNotifierItem PATH_SUFFIXES lib64 lib)
 
 add_library(jupitr_core STATIC
     src/BellSchedule.cpp
@@ -43,10 +46,17 @@ target_link_libraries(jupitr PRIVATE jupitr_core Qt6::DBus Qt6::Gui Qt6::Widgets
 target_include_directories(jupitr PRIVATE ${XCB_INCLUDE_DIR})
 target_link_libraries(jupitr PRIVATE ${XCB_LIBRARY})
 target_compile_definitions(jupitr PRIVATE JUPITR_VERSION="${PROJECT_VERSION}")
+if(KSTATUSNOTIFIERITEM_INCLUDE_DIR AND KSTATUSNOTIFIERITEM_LIBRARY)
+    target_include_directories(jupitr PRIVATE ${KSTATUSNOTIFIERITEM_INCLUDE_DIR})
+    target_link_libraries(jupitr PRIVATE ${KSTATUSNOTIFIERITEM_LIBRARY})
+    target_compile_definitions(jupitr PRIVATE JUPITR_USE_KSTATUSNOTIFIERITEM)
+endif()
 
 include(GNUInstallDirs)
+configure_file(resources/jupitr.desktop.in
+               ${CMAKE_CURRENT_BINARY_DIR}/jupitr.desktop @ONLY)
 install(TARGETS jupitr RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-install(FILES resources/jupitr.desktop
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/jupitr.desktop
         DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 install(FILES ../shared/assets/jupitr.svg
         DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps

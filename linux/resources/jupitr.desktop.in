@@ -2,7 +2,7 @@
 Type=Application
 Name=Jupitr
 Comment=School schedule tray application
-Exec=env QT_QPA_PLATFORM=xcb jupitr
+Exec=env QT_QPA_PLATFORM=xcb @CMAKE_INSTALL_FULL_BINDIR@/jupitr
 Icon=jupitr
 Terminal=false
 StartupNotify=false

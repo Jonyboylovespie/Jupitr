@@ -7,10 +7,13 @@
 #include <QObject>
 #include <QPointer>
 #include <QPoint>
-#include <QSystemTrayIcon>
 #include <QTimer>
 
-#include <optional>
+#ifdef JUPITR_USE_KSTATUSNOTIFIERITEM
+#include <KStatusNotifierItem>
+#else
+#include <QSystemTrayIcon>
+#endif
 
 class QMenu;
 
@@ -34,13 +37,15 @@ private:
 
     ScheduleConfig m_config;
     Scraper m_scraper;
+#ifdef JUPITR_USE_KSTATUSNOTIFIERITEM
+    KStatusNotifierItem m_tray;
+#else
     QSystemTrayIcon m_tray;
+#endif
     QMenu *m_menu = nullptr;
     QPointer<PopupWindow> m_popup;
     QPointer<SettingsWindow> m_settings;
     QPoint m_popupAnchor;
-    std::optional<QPoint> m_nativePopupAnchor;
-    QString m_popupScreenName;
     QString m_currentDayType = QStringLiteral("Loading...");
     QDate m_lastCheckedDate;
     QTimer m_updateTimer;

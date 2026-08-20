@@ -9,8 +9,6 @@
 #include <QApplication>
 #include <QCursor>
 #include <QDateTime>
-#include <QDBusInterface>
-#include <QDBusReply>
 #include <QMenu>
 #include <QScreen>
 #include <QTimer>
@@ -60,28 +58,35 @@ void markAsTrayPopup(QWidget *window)
     xcb_flush(connection);
 }
 
-std::optional<QPoint> nativePointerPosition()
+#ifdef JUPITR_USE_KSTATUSNOTIFIERITEM
+QPoint logicalTrayPosition(const QPoint &nativePosition)
 {
-    if (QGuiApplication::platformName() != QStringLiteral("xcb"))
-        return std::nullopt;
+    QScreen *screen = nullptr;
+    for (QScreen *candidate : QApplication::screens()) {
+        const qreal scale = candidate->devicePixelRatio();
+        const QRect logical = candidate->geometry();
+        const QRect native(qRound(logical.x() * scale), qRound(logical.y() * scale),
+                           qRound(logical.width() * scale), qRound(logical.height() * scale));
+        if (native.contains(nativePosition)) {
+            screen = candidate;
+            break;
+        }
+    }
 
-    auto *x11 = qGuiApp->nativeInterface<QNativeInterface::QX11Application>();
-    if (!x11 || !x11->connection())
-        return std::nullopt;
+    if (!screen)
+        screen = QApplication::primaryScreen();
+    if (!screen)
+        return nativePosition;
 
-    xcb_connection_t *connection = x11->connection();
-    const xcb_screen_iterator_t screens = xcb_setup_roots_iterator(xcb_get_setup(connection));
-    if (!screens.data)
-        return std::nullopt;
-
-    const auto cookie = xcb_query_pointer(connection, screens.data->root);
-    xcb_query_pointer_reply_t *reply = xcb_query_pointer_reply(connection, cookie, nullptr);
-    if (!reply)
-        return std::nullopt;
-    const QPoint position(reply->root_x, reply->root_y);
-    std::free(reply);
-    return position;
+    const qreal scale = screen->devicePixelRatio();
+    const QRect logical = screen->geometry();
+    const QPoint nativeOrigin(qRound(logical.x() * scale), qRound(logical.y() * scale));
+    return logical.topLeft()
+        + QPoint(qRound((nativePosition.x() - nativeOrigin.x()) / scale),
+                 qRound((nativePosition.y() - nativeOrigin.y()) / scale));
 }
+#endif
+
 #endif
 
 } // namespace
@@ -89,32 +94,54 @@ std::optional<QPoint> nativePointerPosition()
 namespace jupitr {
 
 TrayApp::TrayApp(QObject *parent)
-    : QObject(parent), m_config(ScheduleConfig::load()), m_scraper(this), m_tray(Theme::trayIcon(), this)
+    : QObject(parent), m_config(ScheduleConfig::load()), m_scraper(this)
+#ifdef JUPITR_USE_KSTATUSNOTIFIERITEM
+    , m_tray(QStringLiteral("jupitr"), this)
+#else
+    , m_tray(Theme::trayIcon(), this)
+#endif
 {
     m_menu = new QMenu;
     auto *quitAction = m_menu->addAction(QStringLiteral("Quit"));
     connect(quitAction, &QAction::triggered, qApp, &QCoreApplication::quit);
 
     m_tray.setContextMenu(m_menu);
+#ifdef JUPITR_USE_KSTATUSNOTIFIERITEM
+    m_tray.setCategory(KStatusNotifierItem::ApplicationStatus);
+    m_tray.setTitle(QStringLiteral("Jupitr"));
+    m_tray.setIconByPixmap(Theme::trayIcon());
+    m_tray.setToolTip(Theme::trayIcon(), QStringLiteral("Jupitr"),
+                      QStringLiteral("School Schedule"));
+#else
     m_tray.setToolTip(QStringLiteral("Jupitr — School Schedule"));
+#endif
     connect(qApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState state) {
         if (state != Qt::ApplicationActive && m_popup && m_popup->isVisible())
             m_popup->hide();
     });
+#ifdef JUPITR_USE_KSTATUSNOTIFIERITEM
+    connect(&m_tray, &KStatusNotifierItem::activateRequested,
+            this, [this](bool, const QPoint &position) {
+#ifdef Q_OS_LINUX
+        // Plasma sends StatusNotifierItem activation coordinates in physical
+        // pixels. QWidget::move() uses Qt logical coordinates, so convert once
+        // before using the click as the popup's horizontal center.
+        m_popupAnchor = logicalTrayPosition(position);
+#else
+        m_popupAnchor = position;
+#endif
+        showPopup();
+    });
+    m_tray.setStatus(KStatusNotifierItem::Active);
+#else
     connect(&m_tray, &QSystemTrayIcon::activated, this, [this](QSystemTrayIcon::ActivationReason reason) {
         if (reason == QSystemTrayIcon::Trigger || reason == QSystemTrayIcon::DoubleClick) {
             m_popupAnchor = QCursor::pos();
-#ifdef Q_OS_LINUX
-            m_nativePopupAnchor = nativePointerPosition();
-            QDBusInterface kwin(QStringLiteral("org.kde.KWin"), QStringLiteral("/KWin"),
-                                QStringLiteral("org.kde.KWin"));
-            const QDBusReply<QString> output = kwin.call(QStringLiteral("activeOutputName"));
-            m_popupScreenName = output.isValid() ? output.value() : QString();
-#endif
             showPopup();
         }
     });
     m_tray.show();
+#endif
 
     connect(&m_updateTimer, &QTimer::timeout, this, [this]() {
         const auto today = QDate::currentDate();
@@ -204,7 +231,12 @@ void TrayApp::updateTrayTooltip()
     const auto now = QTime::currentTime();
     const auto blocks = BellSchedule::blocksForDayType(m_currentDayType);
     if (blocks.isEmpty()) {
+#ifdef JUPITR_USE_KSTATUSNOTIFIERITEM
+        m_tray.setToolTip(Theme::trayIcon(), QStringLiteral("Jupitr"),
+                          QStringLiteral("Schedule unavailable"));
+#else
         m_tray.setToolTip(QStringLiteral("Jupitr — schedule unavailable"));
+#endif
         return;
     }
 
@@ -225,7 +257,11 @@ void TrayApp::updateTrayTooltip()
     } else {
         tooltip = QStringLiteral("School is over");
     }
+#ifdef JUPITR_USE_KSTATUSNOTIFIERITEM
+    m_tray.setToolTip(Theme::trayIcon(), QStringLiteral("Jupitr"), tooltip);
+#else
     m_tray.setToolTip(tooltip);
+#endif
 }
 
 void TrayApp::positionPopup()
@@ -234,86 +270,27 @@ void TrayApp::positionPopup()
         return;
 
     const QPoint anchor = m_popupAnchor.isNull() ? QCursor::pos() : m_popupAnchor;
-    QPoint scaledAnchor = anchor;
-    QScreen *screen = nullptr;
-
-    // KWin knows which output received the panel click, so prefer its output
-    // identity over attempting to infer a monitor from mixed coordinate spaces.
-    for (QScreen *candidate : QApplication::screens()) {
-        if (candidate->name() == m_popupScreenName) {
-            screen = candidate;
-            break;
-        }
-    }
-
-    auto mapNativeAnchor = [this](QScreen *candidate) -> QPoint {
-        const QPoint nativeAnchor = *m_nativePopupAnchor;
-        const qreal scale = candidate->devicePixelRatio();
-        const QRect logical = candidate->geometry();
-        // XWayland reports the pointer relative to the active output, while
-        // QScreen uses a global origin plus logical (scaled) dimensions.
-        return QPoint(logical.x() + qRound(nativeAnchor.x() / scale),
-                      logical.y() + qRound(nativeAnchor.y() / scale));
-    };
-
-    if (screen && m_nativePopupAnchor.has_value())
-        scaledAnchor = mapNativeAnchor(screen);
-
-    // Fall back to matching the native pointer against physical output
-    // rectangles on desktops that do not expose KWin's output-name method.
-    if (!screen && m_nativePopupAnchor.has_value()) {
-        const QPoint nativeAnchor = *m_nativePopupAnchor;
-        for (QScreen *candidate : QApplication::screens()) {
-            const qreal scale = candidate->devicePixelRatio();
-            const QRect logical = candidate->geometry();
-            const QRect native(logical.x(), logical.y(),
-                               qRound(logical.width() * scale), qRound(logical.height() * scale));
-            if (native.contains(nativeAnchor)) {
-                screen = candidate;
-                scaledAnchor = mapNativeAnchor(candidate);
-                break;
-            }
-        }
-    }
-
-    if (!screen) {
-        for (QScreen *candidate : QApplication::screens()) {
-            const qreal scale = candidate->devicePixelRatio();
-            const QPoint corrected(qRound(anchor.x() * scale), qRound(anchor.y() * scale));
-            if (candidate->geometry().contains(corrected)) {
-                screen = candidate;
-                scaledAnchor = corrected;
-                break;
-            }
-        }
-    }
-    if (!screen) {
-        screen = QApplication::screenAt(anchor);
-        if (!screen)
-            screen = QApplication::primaryScreen();
-        if (screen) {
-            const qreal scale = screen->devicePixelRatio();
-            scaledAnchor = QPoint(qRound(anchor.x() * scale), qRound(anchor.y() * scale));
-        }
-    }
+    QScreen *screen = QApplication::screenAt(anchor);
+    if (!screen)
+        screen = QApplication::primaryScreen();
     if (!screen)
         return;
 
     const QRect workArea = screen->availableGeometry();
-    const QRect trayGeometry = m_tray.geometry();
     QPoint position;
-    // KDE's XWayland work area can include the panel. The StatusNotifier
-    // geometry gives us both the visible icon center and the panel's top edge,
-    // while the activation cursor remains a fallback for other desktops.
+    position.setX(qBound(workArea.left(), anchor.x() - m_popup->width() / 2,
+                         workArea.right() - m_popup->width() + 1));
+#ifdef JUPITR_USE_KSTATUSNOTIFIERITEM
+    position.setY(workArea.bottom() - m_popup->height() - 56);
+#else
+    const QRect trayGeometry = m_tray.geometry();
     if (trayGeometry.isValid()) {
-        position.setX(trayGeometry.center().x() - m_popup->width() / 2);
         position.setY(trayGeometry.top() - m_popup->height() - 8);
     } else {
-        position.setX(scaledAnchor.x() - m_popup->width() / 2);
         position.setY(workArea.bottom() - m_popup->height() - 56);
     }
+#endif
 
-    position.setX(qBound(workArea.left(), position.x(), workArea.right() - m_popup->width()));
     position.setY(qBound(workArea.top(), position.y(), workArea.bottom() - m_popup->height()));
     m_popup->move(position);
 }
