@@ -55,4 +55,4 @@ Autostart is optional and is never enabled by the application itself.
 
 ## KDE and Wayland notes
 
-The popup is a frameless Qt tool window and uses the tray geometry when the desktop exposes it. Wayland compositors may constrain global window placement; when no tray geometry is available, Jupitr falls back to the active screen's work area.
+The schedule view is a frameless Qt tool window: it opens above a bottom panel (or below a top panel) with its right edge aligned to the tray icon, closes when it loses focus or the application is deactivated, and is treated as a utility window rather than a normal application window. The desktop entry launches Jupitr through Qt's XCB compatibility backend so KDE/Wayland can honor the tray-relative position and keep the utility window out of the task bar. A native Wayland `Qt::Popup` is not used because tray activation through the StatusNotifierItem interface does not provide the input serial required to create one.

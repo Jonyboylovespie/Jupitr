@@ -1,0 +1,50 @@
+name: Linux build
+
+on:
+  push:
+    paths:
+      - "linux/**"
+      - "shared/**"
+      - "VERSION"
+      - ".github/workflows/linux-build.yml"
+  pull_request:
+    paths:
+      - "linux/**"
+      - "shared/**"
+      - "VERSION"
+      - ".github/workflows/linux-build.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake qt6-base-dev qt6-svg-dev
+
+      - name: Configure
+        run: cmake -S linux -B build/linux -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+
+      - name: Build
+        run: cmake --build build/linux --parallel
+
+      - name: Test
+        run: ctest --test-dir build/linux --output-on-failure
+
+      - name: Assemble Linux artifact
+        run: |
+          mkdir -p release/Jupitr-Linux-x86_64
+          cp build/linux/jupitr release/Jupitr-Linux-x86_64/
+          cp README.md LICENSE VERSION release/Jupitr-Linux-x86_64/
+          tar -czf Jupitr-Linux-x86_64.tar.gz -C release Jupitr-Linux-x86_64
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Jupitr-Linux-x86_64
+          path: Jupitr-Linux-x86_64.tar.gz

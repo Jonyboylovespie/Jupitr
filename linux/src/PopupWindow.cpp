@@ -2,8 +2,8 @@
 
 #include "Theme.h"
 
+#include <QApplication>
 #include <QFocusEvent>
-#include <QCursor>
 #include <QFont>
 #include <QFrame>
 #include <QHBoxLayout>
@@ -12,6 +12,7 @@
 #include <QScrollArea>
 #include <QShowEvent>
 #include <QSizePolicy>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -22,7 +23,13 @@ namespace jupitr {
 PopupWindow::PopupWindow(ScheduleConfig &config, std::function<void()> openSettings, QWidget *parent)
     : QWidget(parent), m_config(config), m_openSettings(std::move(openSettings))
 {
+    // A tray activation on Wayland does not carry a Wayland input serial, so
+    // a Qt::Popup cannot acquire the required popup grab. A tool window keeps
+    // the tray launch reliable; focus/application deactivation below provides
+    // the same click-away dismissal behavior.
     setWindowFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
+    setAttribute(Qt::WA_X11NetWmWindowTypeDropDownMenu);
+    setFocusPolicy(Qt::StrongFocus);
     setAttribute(Qt::WA_TranslucentBackground);
     setAttribute(Qt::WA_DeleteOnClose, false);
     setFixedWidth(380);
@@ -420,8 +427,17 @@ QString PopupWindow::formattedClassName(const QString &rawName)
 void PopupWindow::focusOutEvent(QFocusEvent *event)
 {
     QWidget::focusOutEvent(event);
-    if (!rect().contains(mapFromGlobal(QCursor::pos())))
+    // A child control (notably the settings button) can receive focus between
+    // mouse press and release. Wait for that transfer to settle so hiding the
+    // popup does not swallow the child's click.
+    QTimer::singleShot(0, this, [this]() {
+        if (!isVisible())
+            return;
+        QWidget *focused = QApplication::focusWidget();
+        if (focused && (focused == this || isAncestorOf(focused)))
+            return;
         hide();
+    });
 }
 
 void PopupWindow::showEvent(QShowEvent *event)

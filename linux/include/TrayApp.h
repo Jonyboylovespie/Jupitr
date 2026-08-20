@@ -6,8 +6,11 @@
 #include <QDate>
 #include <QObject>
 #include <QPointer>
+#include <QPoint>
 #include <QSystemTrayIcon>
 #include <QTimer>
+
+#include <optional>
 
 class QMenu;
 
@@ -35,6 +38,9 @@ private:
     QMenu *m_menu = nullptr;
     QPointer<PopupWindow> m_popup;
     QPointer<SettingsWindow> m_settings;
+    QPoint m_popupAnchor;
+    std::optional<QPoint> m_nativePopupAnchor;
+    QString m_popupScreenName;
     QString m_currentDayType = QStringLiteral("Loading...");
     QDate m_lastCheckedDate;
     QTimer m_updateTimer;

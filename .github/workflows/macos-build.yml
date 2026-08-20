@@ -1,0 +1,41 @@
+name: macOS build
+
+on:
+  push:
+    paths:
+      - "macos/**"
+      - "shared/**"
+      - "VERSION"
+      - ".github/workflows/macos-build.yml"
+  pull_request:
+    paths:
+      - "macos/**"
+      - "shared/**"
+      - "VERSION"
+      - ".github/workflows/macos-build.yml"
+
+jobs:
+  build:
+    runs-on: macos-14
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Show Swift version
+        run: swift --version
+
+      - name: Run macOS core tests
+        run: swift test --package-path macos
+
+      - name: Build application bundle
+        run: bash macos/scripts/build-app.sh
+
+      - name: Archive application bundle
+        run: ditto -c -k --sequesterRsrc --keepParent dist/macos/Jupitr.app Jupitr-macOS.zip
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Jupitr-macOS
+          path: Jupitr-macOS.zip

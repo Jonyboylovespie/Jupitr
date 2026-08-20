@@ -2,7 +2,9 @@
 Type=Application
 Name=Jupitr
 Comment=School schedule tray application
-Exec=jupitr
+Exec=env QT_QPA_PLATFORM=xcb jupitr
 Icon=jupitr
 Terminal=false
+StartupNotify=false
+X-KDE-StartupNotify=false
 Categories=Utility;Education;

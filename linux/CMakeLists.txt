@@ -11,7 +11,12 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 include(CTest)
-find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Widgets Network Svg)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Core DBus Gui Widgets Network Svg)
+find_path(XCB_INCLUDE_DIR xcb/xcb.h REQUIRED)
+find_library(XCB_LIBRARY xcb PATH_SUFFIXES lib64 lib)
+if(NOT XCB_LIBRARY)
+    find_file(XCB_LIBRARY libxcb.so.1 PATHS /usr/lib64 /lib64 /usr/lib /lib REQUIRED)
+endif()
 
 add_library(jupitr_core STATIC
     src/BellSchedule.cpp
@@ -34,7 +39,9 @@ qt_add_executable(jupitr
     include/PopupWindow.h
     include/SettingsWindow.h
 )
-target_link_libraries(jupitr PRIVATE jupitr_core Qt6::Gui Qt6::Widgets Qt6::Svg)
+target_link_libraries(jupitr PRIVATE jupitr_core Qt6::DBus Qt6::Gui Qt6::Widgets Qt6::Svg)
+target_include_directories(jupitr PRIVATE ${XCB_INCLUDE_DIR})
+target_link_libraries(jupitr PRIVATE ${XCB_LIBRARY})
 target_compile_definitions(jupitr PRIVATE JUPITR_VERSION="${PROJECT_VERSION}")
 
 include(GNUInstallDirs)

@@ -9,6 +9,10 @@ cmake-build-*/
 CMakeUserPresets.json
 CMakePresets.json
 
+## Swift Package Manager / macOS packaging outputs
+macos/.build/
+dist/
+
 ## Visual Studio / VS Code
 .vs/
 .vscode/

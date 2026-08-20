@@ -22,7 +22,11 @@ C# / .NET 8 / WinForms. See [Windows setup](docs/windows.md).
 
 C++ / Qt 6, with Fedora KDE / Wayland as the primary target. See [Linux setup](docs/linux.md).
 
-Both implementations use the authoritative schedule specification at [shared/schedule/bell-schedule.json](shared/schedule/bell-schedule.json). The platform implementations remain intentionally separate so each can follow native desktop conventions.
+### macOS
+
+Swift 6 with AppKit and SwiftUI. See [macOS setup](docs/macos.md).
+
+All implementations use the authoritative schedule specification at [shared/schedule/bell-schedule.json](shared/schedule/bell-schedule.json). The platform implementations remain intentionally separate so each can follow native desktop conventions.
 
 ## Building
 
@@ -39,6 +43,13 @@ cmake -S linux -B build/linux -DCMAKE_BUILD_TYPE=Release
 cmake --build build/linux -j
 ```
 
+macOS:
+
+```bash
+swift test --package-path macos
+bash macos/scripts/build-app.sh
+```
+
 See the platform documentation for dependencies, testing, installation, and configuration paths.
 
 ## Project layout
@@ -46,8 +57,13 @@ See the platform documentation for dependencies, testing, installation, and conf
 ```text
 windows/                 .NET 8 WinForms implementation
 linux/                   Qt 6 implementation
+macos/                   Swift/AppKit/SwiftUI implementation
 shared/schedule/         cross-platform bell schedule
 shared/assets/           branding and icons
 shared/test-data/        offline parser fixtures
 docs/                    platform and architecture notes
 ```
+
+## Releases
+
+Jupitr uses one semantic version for every platform. A GitHub release can publish separate artifacts such as `Jupitr-Windows-x64.zip`, `Jupitr-Linux-x86_64.tar.gz`, and `Jupitr-macOS.zip`.

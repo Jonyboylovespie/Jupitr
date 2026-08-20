@@ -1,0 +1,125 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore windows/JupitrApp.csproj
+
+      - name: Publish
+        run: dotnet publish windows/JupitrApp.csproj --configuration Release --runtime win-x64 --self-contained false --no-restore --output publish/windows
+
+      - name: Create Windows archive
+        run: |
+          New-Item -ItemType Directory -Force -Path release | Out-Null
+          Compress-Archive -Path publish/windows/* -DestinationPath release/Jupitr-Windows-x64.zip -Force
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-windows
+          path: release/Jupitr-Windows-x64.zip
+
+  linux:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake qt6-base-dev qt6-svg-dev
+
+      - name: Configure and build
+        run: |
+          cmake -S linux -B build/linux -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/linux --parallel
+
+      - name: Create Linux archive
+        run: |
+          mkdir -p release/Jupitr-Linux-x86_64
+          cp build/linux/jupitr release/Jupitr-Linux-x86_64/
+          cp README.md LICENSE VERSION release/Jupitr-Linux-x86_64/
+          tar -czf release/Jupitr-Linux-x86_64.tar.gz -C release Jupitr-Linux-x86_64
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-linux
+          path: release/Jupitr-Linux-x86_64.tar.gz
+
+  macos:
+    runs-on: macos-14
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Run macOS tests
+        run: swift test --package-path macos
+
+      - name: Build macOS app
+        run: bash macos/scripts/build-app.sh
+
+      - name: Create macOS archive
+        run: ditto -c -k --sequesterRsrc --keepParent dist/macos/Jupitr.app Jupitr-macOS.zip
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-macos
+          path: Jupitr-macOS.zip
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: [windows, linux, macos]
+
+    steps:
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: release-windows
+          path: dist/windows
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: release-linux
+          path: dist/linux
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: release-macos
+          path: dist/macos
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            dist/windows/Jupitr-Windows-x64.zip \
+            dist/linux/Jupitr-Linux-x86_64.tar.gz \
+            dist/macos/Jupitr-macOS.zip \
+            --title "Jupitr $GITHUB_REF_NAME" \
+            --generate-notes
