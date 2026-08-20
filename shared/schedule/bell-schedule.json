@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "regular": {
+    "blocks": [
+      {
+        "name": "Block 1",
+        "start": "07:40",
+        "end": "09:06",
+        "minis": [
+          { "name": "M1", "start": "07:40", "end": "08:20" },
+          { "name": "M2", "start": "08:26", "end": "09:06" }
+        ]
+      },
+      {
+        "name": "Block 2",
+        "start": "09:14",
+        "end": "10:40",
+        "minis": [
+          { "name": "M1", "start": "09:14", "end": "09:54" },
+          { "name": "M2", "start": "10:00", "end": "10:40" }
+        ]
+      },
+      {
+        "name": "Block 3",
+        "start": "11:04",
+        "end": "12:52",
+        "minis": [
+          { "name": "M1", "start": "10:48", "end": "11:28" },
+          { "name": "M2", "start": "11:36", "end": "12:16" }
+        ]
+      },
+      {
+        "name": "Block 4",
+        "start": "13:00",
+        "end": "14:20",
+        "minis": [
+          { "name": "M1", "start": "12:54", "end": "13:34" },
+          { "name": "M2", "start": "13:40", "end": "14:20" }
+        ]
+      }
+    ],
+    "lunchWaves": {
+      "1": { "name": "Lunch", "start": "10:48", "end": "11:18" },
+      "2": { "name": "Lunch", "start": "11:19", "end": "11:49" },
+      "3": { "name": "Lunch", "start": "11:45", "end": "12:15" },
+      "4": { "name": "Lunch", "start": "12:16", "end": "12:46" }
+    }
+  },
+  "advisory": {
+    "blocks": [
+      {
+        "name": "Block 1",
+        "start": "07:40",
+        "end": "09:00",
+        "minis": [
+          { "name": "M1", "start": "07:40", "end": "08:17" },
+          { "name": "M2", "start": "08:23", "end": "09:00" }
+        ]
+      },
+      {
+        "name": "Advisory",
+        "start": "09:08",
+        "end": "09:28",
+        "minis": []
+      },
+      {
+        "name": "Block 2",
+        "start": "09:36",
+        "end": "10:56",
+        "minis": [
+          { "name": "M1", "start": "09:36", "end": "10:13" },
+          { "name": "M2", "start": "10:19", "end": "10:56" }
+        ]
+      },
+      {
+        "name": "Block 3",
+        "start": "11:04",
+        "end": "12:52",
+        "minis": [
+          { "name": "M1", "start": "11:04", "end": "11:41" },
+          { "name": "M2", "start": "11:47", "end": "12:24" }
+        ]
+      },
+      {
+        "name": "Block 4",
+        "start": "13:00",
+        "end": "14:20",
+        "minis": [
+          { "name": "M1", "start": "13:00", "end": "13:37" },
+          { "name": "M2", "start": "13:43", "end": "14:20" }
+        ]
+      }
+    ],
+    "lunchWaves": {
+      "1": { "name": "Lunch", "start": "11:04", "end": "11:32" },
+      "2": { "name": "Lunch", "start": "11:34", "end": "12:02" },
+      "3": { "name": "Lunch", "start": "11:54", "end": "12:22" },
+      "4": { "name": "Lunch", "start": "12:24", "end": "12:52" }
+    }
+  }
+}

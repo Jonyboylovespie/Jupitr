@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Jupitr
+Comment=School schedule tray application
+Exec=jupitr
+Icon=jupitr
+Terminal=false
+Categories=Utility;Education;

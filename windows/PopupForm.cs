@@ -178,14 +178,14 @@ public partial class PopupForm : Form
     public void RefreshData()
     {
         var now = DateTime.Now;
-        var dayLetter = ExtractDayLetter(_dayType);
+        var dayLetter = BellSchedule.ExtractDayLetter(_dayType);
         var nowTs = now.TimeOfDay;
 
         _lblDayType.Text = $"{now:ddd, MMM d}  ·  {_dayType}";
 
         var blocks = BellSchedule.GetBlocksForDayType(_dayType);
         var lunchWave = dayLetter != null ? _config.GetLunchWave(dayLetter) : null;
-        var lunchInfo = BellSchedule.GetLunchInfo(lunchWave, _dayType.Contains("Advisory", StringComparison.OrdinalIgnoreCase));
+        var lunchInfo = BellSchedule.GetLunchInfo(lunchWave, BellSchedule.IsAdvisoryDay(_dayType));
 
         var (current, remaining, index) = BellSchedule.GetCurrentBlock(nowTs, _dayType);
 
@@ -213,8 +213,8 @@ public partial class PopupForm : Form
     {
         if (current != null)
         {
-            var dayLetter = ExtractDayLetter(_dayType);
-            var configIndex = GetConfigBlockIndex(index, _dayType);
+            var dayLetter = BellSchedule.ExtractDayLetter(_dayType);
+            var configIndex = BellSchedule.GetConfigBlockIndex(index, _dayType);
             var rawClass = configIndex.HasValue && dayLetter != null
                 ? _config.GetClass(dayLetter, configIndex.Value)
                 : null;
@@ -282,14 +282,14 @@ public partial class PopupForm : Form
     private List<ScheduleItem> BuildScheduleItems(BellSchedule.TimeBlock[] blocks, BellSchedule.LunchInfo? lunchInfo, int? lunchWave, string? dayLetter)
     {
         var items = new List<ScheduleItem>();
-        bool isAdvisory = _dayType.Contains("Advisory", StringComparison.OrdinalIgnoreCase);
+        bool isAdvisory = BellSchedule.IsAdvisoryDay(_dayType);
 
         for (int i = 0; i < blocks.Length; i++)
         {
             var b = blocks[i];
             bool isAdvisoryBlock = b.Name.Contains("Advisory", StringComparison.OrdinalIgnoreCase);
 
-            var configIndex = GetConfigBlockIndex(i, _dayType);
+            var configIndex = BellSchedule.GetConfigBlockIndex(i, _dayType);
             string? rawClass = null;
             bool hasMinis = false;
             if (configIndex.HasValue && dayLetter != null)
@@ -537,31 +537,6 @@ public partial class PopupForm : Form
     }
 
     private record ScheduleItem(TimeSpan Start, TimeSpan End, string Name, int BlockIndex, bool IsLunch, bool IsAfterLunch, string? MiniClassName);
-
-    private static int? GetConfigBlockIndex(int appBlockIndex, string dayType)
-    {
-        var blocks = BellSchedule.GetBlocksForDayType(dayType);
-        if (appBlockIndex < 0 || appBlockIndex >= blocks.Length)
-            return null;
-        if (blocks[appBlockIndex].Name.Contains("Advisory", StringComparison.OrdinalIgnoreCase))
-            return null;
-
-        int skipCount = 0;
-        for (int i = 0; i < appBlockIndex; i++)
-            if (blocks[i].Name.Contains("Advisory", StringComparison.OrdinalIgnoreCase))
-                skipCount++;
-        return appBlockIndex - skipCount;
-    }
-
-    private static string? ExtractDayLetter(string dayType)
-    {
-        foreach (var letter in new[] { "A", "B", "C", "D", "E", "F", "G", "H" })
-        {
-            if (dayType.Contains($"{letter} Day", StringComparison.OrdinalIgnoreCase))
-                return letter;
-        }
-        return null;
-    }
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {

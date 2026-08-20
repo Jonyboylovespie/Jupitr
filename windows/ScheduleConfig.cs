@@ -34,12 +34,25 @@ public class ScheduleConfig
     public static ScheduleConfig Load()
     {
         var path = ConfigPath;
-        if (File.Exists(path))
+        try
         {
-            var json = File.ReadAllText(path);
-            var cfg = JsonSerializer.Deserialize<ScheduleConfig>(json);
-            if (cfg != null) return cfg;
+            if (File.Exists(path))
+            {
+                var json = File.ReadAllText(path);
+                var cfg = JsonSerializer.Deserialize<ScheduleConfig>(json);
+                if (cfg != null && cfg.Classes != null && cfg.LunchWaves != null)
+                {
+                    EnsureDays(cfg);
+                    return cfg;
+                }
+            }
         }
+        catch (Exception)
+        {
+            // A partially written or hand-edited config should not prevent
+            // the tray application from starting with usable defaults.
+        }
+
         return CreateDefault();
     }
 
@@ -61,5 +74,16 @@ public class ScheduleConfig
         }
         cfg.Save();
         return cfg;
+    }
+
+    private static void EnsureDays(ScheduleConfig cfg)
+    {
+        foreach (var day in new[] { "A", "B", "C", "D", "E", "F", "G", "H" })
+        {
+            if (!cfg.Classes.ContainsKey(day))
+                cfg.Classes[day] = ["", "", "", ""];
+            if (!cfg.LunchWaves.ContainsKey(day))
+                cfg.LunchWaves[day] = 1;
+        }
     }
 }

@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/">
+    <file alias="assets/jupitr.svg">../../shared/assets/jupitr.svg</file>
+    <file alias="schedule/bell-schedule.json">../../shared/schedule/bell-schedule.json</file>
+  </qresource>
+</RCC>

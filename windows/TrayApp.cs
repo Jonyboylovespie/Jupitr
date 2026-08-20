@@ -13,25 +13,21 @@ public class TrayApp : ApplicationContext
     private string _currentDayType = "Loading...";
     private DateTime _lastCheckedDate = DateTime.MinValue;
     private readonly SynchronizationContext _uiContext;
+    private int _dayTypeRefreshInProgress;
+    private bool _disposed;
 
     public TrayApp()
     {
-        _uiContext = SynchronizationContext.Current ?? new SynchronizationContext();
+        _uiContext = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
         _scraper = new Scraper();
         _config = ScheduleConfig.Load();
 
         InitializeTrayIcon();
 
-        // Fetch day type in background
-        _ = Task.Run(async () =>
-        {
-            var now = DateTime.Now;
-            var dayType = await _scraper.GetDayTypeAsync(now);
-            _currentDayType = dayType ?? "Unknown";
-            _lastCheckedDate = now.Date;
-
-            _uiContext.Post(_ => UpdateTrayTooltip(now), null);
-        });
+        // Fetch day type in background. The result is applied on the UI
+        // context so a popup opened during startup cannot retain a stale
+        // "Loading..." state.
+        RefreshDayType(DateTime.Now);
     }
 
     private void InitializeTrayIcon()
@@ -73,20 +69,7 @@ public class TrayApp : ApplicationContext
         // so the schedule stays accurate when the laptop is left running overnight.
         var now = DateTime.Now;
         if (_lastCheckedDate != now.Date)
-        {
-            _ = Task.Run(async () =>
-            {
-                var dayType = await _scraper.GetDayTypeAsync(now);
-                _currentDayType = dayType ?? "Unknown";
-                _lastCheckedDate = now.Date;
-
-                _uiContext.Post(_ =>
-                {
-                    _popup?.SetDayType(_currentDayType);
-                    _popup?.RefreshData();
-                }, null);
-            });
-        }
+            RefreshDayType(now);
 
         _popup.SetDayType(_currentDayType);
         _popup.RefreshData();
@@ -117,14 +100,14 @@ public class TrayApp : ApplicationContext
 
     private void UpdateTrayTooltip(DateTime now)
     {
-        var dayLetter = ExtractDayLetter(_currentDayType);
+        var dayLetter = BellSchedule.ExtractDayLetter(_currentDayType);
         var blocks = BellSchedule.GetBlocksForDayType(_currentDayType);
         var (current, remaining, index) = BellSchedule.GetCurrentBlock(now.TimeOfDay, _currentDayType);
 
         string tooltip;
         if (current != null)
         {
-            var configIndex = GetConfigBlockIndex(index, _currentDayType);
+            var configIndex = BellSchedule.GetConfigBlockIndex(index, _currentDayType);
             var className = configIndex.HasValue && dayLetter != null
                 ? _config.GetClass(dayLetter, configIndex.Value)
                 : null;
@@ -143,35 +126,40 @@ public class TrayApp : ApplicationContext
         _trayIcon.Text = tooltip.Length > 63 ? tooltip[..63] : tooltip;
     }
 
-    private static int? GetConfigBlockIndex(int appBlockIndex, string dayType)
+    private void RefreshDayType(DateTime date)
     {
-        var blocks = BellSchedule.GetBlocksForDayType(dayType);
-        if (appBlockIndex < 0 || appBlockIndex >= blocks.Length)
-            return null;
-        if (blocks[appBlockIndex].Name.Contains("Advisory", StringComparison.OrdinalIgnoreCase))
-            return null;
+        if (Interlocked.Exchange(ref _dayTypeRefreshInProgress, 1) == 1)
+            return;
 
-        int skipCount = 0;
-        for (int i = 0; i < appBlockIndex; i++)
-            if (blocks[i].Name.Contains("Advisory", StringComparison.OrdinalIgnoreCase))
-                skipCount++;
-        return appBlockIndex - skipCount;
-    }
-
-    private static string? ExtractDayLetter(string dayType)
-    {
-        foreach (var letter in new[] { "A", "B", "C", "D", "E", "F", "G", "H" })
+        _ = Task.Run(async () =>
         {
-            if (dayType.Contains($"{letter} Day", StringComparison.OrdinalIgnoreCase))
-                return letter;
-        }
-        return null;
+            try
+            {
+                var dayType = await _scraper.GetDayTypeAsync(date).ConfigureAwait(false) ?? "Unknown";
+                _uiContext.Post(_ =>
+                {
+                    if (_disposed)
+                        return;
+
+                    _currentDayType = dayType;
+                    _lastCheckedDate = date.Date;
+                    _popup?.SetDayType(_currentDayType);
+                    _popup?.RefreshData();
+                    UpdateTrayTooltip(date);
+                }, null);
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _dayTypeRefreshInProgress, 0);
+            }
+        });
     }
 
     protected override void Dispose(bool disposing)
     {
         if (disposing)
         {
+            _disposed = true;
             _trayIcon?.Dispose();
             _popup?.Dispose();
             _settingsForm?.Dispose();

@@ -3,6 +3,12 @@ bin/
 obj/
 publish/
 
+## CMake / Linux build outputs
+build/
+cmake-build-*/
+CMakeUserPresets.json
+CMakePresets.json
+
 ## Visual Studio / VS Code
 .vs/
 .vscode/

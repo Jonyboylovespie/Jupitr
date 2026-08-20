@@ -62,58 +62,73 @@ public class Scraper
         return null;
     }
 
-    private static string? ParseDayTypeFromHtml(string html, DateTime targetDate)
+    /// <summary>
+    /// Parses a saved district calendar page without performing network I/O.
+    /// Keeping this method independent makes fixture-based parser tests
+    /// possible and keeps the network/cache lifecycle small.
+    /// </summary>
+    public static string? ParseDayTypeFromHtml(string html, DateTime targetDate)
     {
-        // Simple regex-based parsing to avoid XPath exact-class-match issues
-        // The calendar uses a grid of day boxes
-        var dayBoxes = Regex.Matches(html,
-            @"<div\s+class=[""]fsCalendarDaybox[^""]*[""]\s*>(.*?)</div>\s*</div>\s*</div>",
-            RegexOptions.Singleline | RegexOptions.IgnoreCase);
+        var document = new HtmlAgilityPack.HtmlDocument();
+        document.LoadHtml(html);
 
-        Log($"Found {dayBoxes.Count} day boxes via regex");
+        var dayBoxes = document.DocumentNode.SelectNodes(
+            "//div[contains(concat(' ', normalize-space(@class), ' '), ' fsCalendarDaybox ')]");
+        Log($"Found {dayBoxes?.Count ?? 0} day boxes via HTML parser");
 
-        foreach (Match box in dayBoxes)
+        if (dayBoxes == null)
+            return null;
+
+        foreach (var box in dayBoxes)
         {
-            var boxHtml = box.Groups[1].Value;
+            var monthNode = box.SelectSingleNode(
+                ".//*[contains(concat(' ', normalize-space(@class), ' '), ' fsCalendarMonth ')]");
+            if (monthNode == null)
+                continue;
 
-            // Extract date from the box
-            var dateMatch = Regex.Match(boxHtml,
-                @"<span\s+class=[""]fsCalendarMonth[""]\s*>([^<]+)</span>\s*(\d+)");
-            if (!dateMatch.Success) continue;
+            // Extract the number immediately following the month element.
+            var dateMatch = Regex.Match(
+                box.InnerHtml,
+                @"fsCalendarMonth[^>]*>\s*[^<]+\s*</span>\s*(?<day>\d{1,2})",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (!dateMatch.Success || !int.TryParse(dateMatch.Groups["day"].Value, out var dayNum))
+                continue;
 
-            var monthName = dateMatch.Groups[1].Value.Trim();
-            var dayNum = int.Parse(dateMatch.Groups[2].Value);
-            var boxDate = new DateTime(targetDate.Year, ParseMonth(monthName), dayNum);
-
-            if (boxDate.Date != targetDate.Date) continue;
-
-            // Find DHS School Calendar events in this box
-            var events = Regex.Matches(boxHtml,
-                @"<div\s+class=[""]fsCalendarInfo[""]\s*>(.*?)</div>",
-                RegexOptions.Singleline | RegexOptions.IgnoreCase);
-
-            foreach (Match ev in events)
+            var monthName = HtmlAgilityPack.HtmlEntity.DeEntitize(monthNode.InnerText).Trim();
+            DateTime boxDate;
+            try
             {
-                var evHtml = ev.Groups[1].Value;
-                if (!evHtml.Contains("DHS School Calendar", StringComparison.OrdinalIgnoreCase))
+                boxDate = new DateTime(targetDate.Year, ParseMonth(monthName), dayNum);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                continue;
+            }
+
+            if (boxDate.Date != targetDate.Date)
+                continue;
+
+            // Find DHS School Calendar events in this box.
+            var events = box.SelectNodes(
+                ".//div[contains(concat(' ', normalize-space(@class), ' '), ' fsCalendarInfo ')]");
+            if (events == null)
+                continue;
+
+            foreach (var ev in events)
+            {
+                var eventText = HtmlAgilityPack.HtmlEntity.DeEntitize(ev.InnerText).Trim();
+                if (!eventText.Contains("DHS School Calendar", StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                var titleMatch = Regex.Match(evHtml,
-                    @"<a\s+[^>]*class=[""]fsCalendarEventTitle\s+fsCalendarEventLink[""]\s+title=[""]([^""]+)[""]");
-                if (titleMatch.Success)
-                {
-                    return titleMatch.Groups[1].Value.Trim();
-                }
+                var titleNode = ev.SelectSingleNode(
+                    ".//a[contains(concat(' ', normalize-space(@class), ' '), ' fsCalendarEventTitle ')]");
+                var title = titleNode?.GetAttributeValue("title", string.Empty)?.Trim();
+                if (!string.IsNullOrWhiteSpace(title))
+                    return HtmlAgilityPack.HtmlEntity.DeEntitize(title);
 
-                // Fallback: extract title from inner text
-                var innerMatch = Regex.Match(evHtml,
-                    @">\s*([^<]+?)\s*</a>");
-                if (innerMatch.Success)
-                {
-                    var text = innerMatch.Groups[1].Value.Trim();
-                    if (!string.IsNullOrWhiteSpace(text) && text.Length < 100)
-                        return text;
-                }
+                var text = HtmlAgilityPack.HtmlEntity.DeEntitize(titleNode?.InnerText ?? string.Empty).Trim();
+                if (!string.IsNullOrWhiteSpace(text) && text.Length < 100)
+                    return text;
             }
         }
 
@@ -126,7 +141,7 @@ public class Scraper
             return dt.Month;
         if (DateTime.TryParseExact(monthName, "MMM", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out dt))
             return dt.Month;
-        return DateTime.Now.Month;
+        return 0;
     }
 
     private static string? TryGetCached(DateTime date)
