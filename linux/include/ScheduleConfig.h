@@ -18,15 +18,20 @@ public:
 
     QString className(const QString &dayLetter, int blockIndex) const;
     std::optional<int> lunchWave(const QString &dayLetter) const;
+    std::optional<int> additionalLunchWave(const QString &dayLetter) const;
+    static bool supportsAdditionalLunch(const QString &blockThreeClass);
     void setClasses(const QString &dayLetter, const QStringList &classes);
     void setLunchWave(const QString &dayLetter, int wave);
+    void setAdditionalLunchWave(const QString &dayLetter, int wave);
 
     const QMap<QString, QStringList> &classes() const { return m_classes; }
     const QMap<QString, int> &lunchWaves() const { return m_lunchWaves; }
+    const QMap<QString, int> &additionalLunchWaves() const { return m_additionalLunchWaves; }
 
 private:
     QMap<QString, QStringList> m_classes;
     QMap<QString, int> m_lunchWaves;
+    QMap<QString, int> m_additionalLunchWaves;
 };
 
 } // namespace jupitr

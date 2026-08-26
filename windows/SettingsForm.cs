@@ -7,6 +7,7 @@ public partial class SettingsForm : Form
     private readonly ScheduleConfig _config;
     private readonly Dictionary<string, TextBox[]> _dayInputs = new();
     private readonly Dictionary<string, ComboBox> _lunchInputs = new();
+    private readonly Dictionary<string, ComboBox> _additionalLunchInputs = new();
 
     public SettingsForm(ScheduleConfig config)
     {
@@ -17,14 +18,14 @@ public partial class SettingsForm : Form
     private void InitializeComponent()
     {
         Text = "Edit Schedule";
-        Size = new Size(720, 560);
+        Size = new Size(850, 560);
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.Sizable;
         MaximizeBox = false;
         MinimizeBox = false;
         BackColor = JupiterTheme.DarkBg;
         ForeColor = JupiterTheme.Cream;
-        MinimumSize = new Size(600, 450);
+        MinimumSize = new Size(760, 450);
 
         // Title
         var lblTitle = new Label
@@ -40,7 +41,7 @@ public partial class SettingsForm : Form
         // Subtitle
         var lblSub = new Label
         {
-            Text = "Enter your classes and lunch wave for each day",
+            Text = "Enter your classes and lunch waves for each day",
             Font = JupiterTheme.FontSmall,
             ForeColor = JupiterTheme.Muted,
             AutoSize = true,
@@ -52,21 +53,23 @@ public partial class SettingsForm : Form
         var table = new TableLayoutPanel
         {
             Location = new Point(16, 80),
-            Size = new Size(672, 380),
-            ColumnCount = 6,
+            Size = new Size(802, 380),
+            ColumnCount = 7,
             RowCount = 9,
             BackColor = JupiterTheme.DarkBg
         };
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
         for (int c = 0; c < 4; c++)
-            table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
+            table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130));
 
         // Header row
         table.Controls.Add(MakeHeaderCell(""), 0, 0);
         for (int b = 0; b < 4; b++)
             table.Controls.Add(MakeHeaderCell($"Block {b + 1}"), b + 1, 0);
         table.Controls.Add(MakeHeaderCell("Lunch"), 5, 0);
+        table.Controls.Add(MakeHeaderCell("Additional Lunch\n(optional)"), 6, 0);
 
         var days = new[] { "A", "B", "C", "D", "E", "F", "G", "H" };
         for (int d = 0; d < days.Length; d++)
@@ -115,6 +118,30 @@ public partial class SettingsForm : Form
 
             _lunchInputs[day] = cb;
             table.Controls.Add(cb, 5, d + 1);
+
+            var additional = new ComboBox
+            {
+                Dock = DockStyle.Fill,
+                Margin = new Padding(4),
+                BackColor = JupiterTheme.CardBg,
+                ForeColor = JupiterTheme.Cream,
+                FlatStyle = FlatStyle.Flat,
+                Font = JupiterTheme.FontSmall,
+                DropDownStyle = ComboBoxStyle.DropDownList
+            };
+            additional.Items.AddRange(["None", "Wave 1", "Wave 2", "Wave 3", "Wave 4"]);
+            additional.SelectedIndex = _config.GetAdditionalLunchWave(day) ?? 0;
+            _additionalLunchInputs[day] = additional;
+            table.Controls.Add(additional, 6, d + 1);
+
+            void UpdateAdditionalLunchState()
+            {
+                additional.Enabled = ScheduleConfig.SupportsAdditionalLunch(inputs[2].Text);
+                if (!additional.Enabled)
+                    additional.SelectedIndex = 0;
+            }
+            inputs[2].TextChanged += (_, _) => UpdateAdditionalLunchState();
+            UpdateAdditionalLunchState();
         }
 
         Controls.Add(table);
@@ -128,7 +155,7 @@ public partial class SettingsForm : Form
             BackColor = JupiterTheme.Orange,
             FlatStyle = FlatStyle.Flat,
             Size = new Size(100, 36),
-            Location = new Point(588, 472),
+            Location = new Point(718, 472),
             Cursor = Cursors.Hand
         };
         btnSave.FlatAppearance.BorderSize = 0;
@@ -175,6 +202,12 @@ public partial class SettingsForm : Form
             var day = kvp.Key;
             var cb = kvp.Value;
             _config.LunchWaves[day] = cb.SelectedIndex; // 0=None, 1=Wave1, etc.
+        }
+
+        foreach (var kvp in _additionalLunchInputs)
+        {
+            var day = kvp.Key;
+            _config.AdditionalLunchWaves[day] = kvp.Value.Enabled ? kvp.Value.SelectedIndex : 0;
         }
 
         _config.Save();

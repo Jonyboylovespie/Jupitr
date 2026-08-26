@@ -178,25 +178,24 @@ public partial class PopupForm : Form
     public void RefreshData()
     {
         var now = DateTime.Now;
-        var dayLetter = BellSchedule.ExtractDayLetter(_dayType);
+        var lunchDayLetter = BellSchedule.GetLunchDayLetter(_dayType);
         var nowTs = now.TimeOfDay;
 
         _lblDayType.Text = $"{now:ddd, MMM d}  ·  {_dayType}";
 
         var blocks = BellSchedule.GetBlocksForDayType(_dayType);
-        var lunchWave = dayLetter != null ? _config.GetLunchWave(dayLetter) : null;
-        var lunchInfo = BellSchedule.GetLunchInfo(lunchWave, BellSchedule.IsAdvisoryDay(_dayType));
+        var lunches = GetLunchPeriods(lunchDayLetter);
 
         var (current, remaining, index) = BellSchedule.GetCurrentBlock(nowTs, _dayType);
 
-        UpdateMainTimer(nowTs, blocks, current, remaining, index, lunchInfo);
+        UpdateMainTimer(nowTs, blocks, current, remaining, index, lunches);
 
-        var newItems = BuildScheduleItems(blocks, lunchInfo, lunchWave, dayLetter);
+        var newItems = BuildScheduleItems(blocks, lunches);
         bool needsRebuild = _lastItems == null || _lastDayType != _dayType || !ItemsEqual(_lastItems, newItems);
 
         if (needsRebuild)
         {
-            BuildScheduleControls(newItems, nowTs, dayLetter);
+            BuildScheduleControls(newItems, nowTs, lunchDayLetter);
             _lastItems = newItems;
             _lastDayType = _dayType;
 
@@ -209,16 +208,56 @@ public partial class PopupForm : Form
         }
     }
 
-    private void UpdateMainTimer(TimeSpan now, BellSchedule.TimeBlock[] blocks, BellSchedule.TimeBlock? current, TimeSpan remaining, int index, BellSchedule.LunchInfo? lunch)
+    private List<LunchPeriod> GetLunchPeriods(string? dayLetter)
+    {
+        var periods = new List<LunchPeriod>();
+        if (dayLetter == null)
+            return periods;
+
+        foreach (var wave in new[] { _config.GetLunchWave(dayLetter), _config.GetAdditionalLunchWave(dayLetter) })
+        {
+            if (!wave.HasValue || periods.Any(period => period.Wave == wave.Value))
+                continue;
+            var info = BellSchedule.GetLunchInfo(wave, _dayType);
+            if (info != null)
+                periods.Add(new LunchPeriod(info, wave.Value));
+        }
+        return periods;
+    }
+
+    private void UpdateMainTimer(TimeSpan now, BellSchedule.TimeBlock[] blocks, BellSchedule.TimeBlock? current, TimeSpan remaining, int index, List<LunchPeriod> lunches)
     {
         if (current != null)
         {
-            var dayLetter = BellSchedule.ExtractDayLetter(_dayType);
+            var dayLetter = BellSchedule.GetConfigDayLetter(index, _dayType);
             var configIndex = BellSchedule.GetConfigBlockIndex(index, _dayType);
             var rawClass = configIndex.HasValue && dayLetter != null
                 ? _config.GetClass(dayLetter, configIndex.Value)
                 : null;
             bool hasMinis = !string.IsNullOrWhiteSpace(rawClass) && rawClass.Contains('/');
+
+            var activeLunch = lunches.FirstOrDefault(period => now >= period.Info.Start && now < period.Info.End);
+            if (activeLunch != null)
+            {
+                var lunchRemaining = activeLunch.Info.End - now;
+                _lblTimer.Text = BellSchedule.FormatRemaining(lunchRemaining);
+                _lblTimer.ForeColor = JupiterTheme.Yellow;
+                _lblSubtitle.Text = $"Lunch Wave {activeLunch.Wave}!";
+                return;
+            }
+
+            var nextLunch = lunches
+                .Where(period => period.Info.Start > now && period.Info.Start < current.End)
+                .OrderBy(period => period.Info.Start)
+                .FirstOrDefault();
+            if (nextLunch != null)
+            {
+                var untilLunch = nextLunch.Info.Start - now;
+                _lblTimer.Text = BellSchedule.FormatRemaining(untilLunch);
+                _lblTimer.ForeColor = JupiterTheme.Yellow;
+                _lblSubtitle.Text = $"Lunch Wave {nextLunch.Wave} starts at {BellSchedule.FormatTime(nextLunch.Info.Start)}";
+                return;
+            }
 
             var miniInfo = BellSchedule.GetCurrentMini(now, _dayType);
             if (miniInfo.HasValue && hasMinis)
@@ -233,36 +272,18 @@ public partial class PopupForm : Form
                 return;
             }
 
-            if (lunch != null && now >= lunch.Start && now < lunch.End)
-            {
-                var lunchRemaining = lunch.End - now;
-                _lblTimer.Text = BellSchedule.FormatRemaining(lunchRemaining);
-                _lblTimer.ForeColor = JupiterTheme.Yellow;
-                _lblSubtitle.Text = "Lunch time!";
-                return;
-            }
-
-            if (lunch != null && now < lunch.Start && lunch.Start < current.End)
-            {
-                var untilLunch = lunch.Start - now;
-                _lblTimer.Text = BellSchedule.FormatRemaining(untilLunch);
-                _lblTimer.ForeColor = JupiterTheme.Yellow;
-                _lblSubtitle.Text = $"Lunch starts at {BellSchedule.FormatTime(lunch.Start)}";
-                return;
-            }
-
             _lblTimer.Text = BellSchedule.FormatRemaining(remaining);
             _lblTimer.ForeColor = remaining.TotalMinutes < 5 ? JupiterTheme.Yellow : JupiterTheme.Orange;
 
             var disp = FormatClassForDisplay(rawClass) ?? current.Name;
             _lblSubtitle.Text = $"Current: {disp} — ends {BellSchedule.FormatTime(current.End)}";
         }
-        else if (lunch != null && now >= lunch.Start && now < lunch.End)
+        else if (lunches.FirstOrDefault(period => now >= period.Info.Start && now < period.Info.End) is { } activeLunch)
         {
-            var lunchRemaining = lunch.End - now;
+            var lunchRemaining = activeLunch.Info.End - now;
             _lblTimer.Text = BellSchedule.FormatRemaining(lunchRemaining);
             _lblTimer.ForeColor = JupiterTheme.Yellow;
-            _lblSubtitle.Text = "Lunch time!";
+            _lblSubtitle.Text = $"Lunch Wave {activeLunch.Wave}!";
         }
         else if (now < blocks[0].Start)
         {
@@ -279,17 +300,15 @@ public partial class PopupForm : Form
         }
     }
 
-    private List<ScheduleItem> BuildScheduleItems(BellSchedule.TimeBlock[] blocks, BellSchedule.LunchInfo? lunchInfo, int? lunchWave, string? dayLetter)
+    private List<ScheduleItem> BuildScheduleItems(BellSchedule.TimeBlock[] blocks, List<LunchPeriod> lunches)
     {
         var items = new List<ScheduleItem>();
-        bool isAdvisory = BellSchedule.IsAdvisoryDay(_dayType);
 
         for (int i = 0; i < blocks.Length; i++)
         {
             var b = blocks[i];
-            bool isAdvisoryBlock = b.Name.Contains("Advisory", StringComparison.OrdinalIgnoreCase);
-
             var configIndex = BellSchedule.GetConfigBlockIndex(i, _dayType);
+            var dayLetter = BellSchedule.GetConfigDayLetter(i, _dayType);
             string? rawClass = null;
             bool hasMinis = false;
             if (configIndex.HasValue && dayLetter != null)
@@ -298,60 +317,9 @@ public partial class PopupForm : Form
                 hasMinis = !string.IsNullOrWhiteSpace(rawClass) && rawClass.Contains('/');
             }
 
-            // Check if lunch falls inside this block (not after it)
-            bool lunchInsideBlock = lunchInfo != null && !isAdvisoryBlock &&
-                lunchInfo.Start > b.Start && lunchInfo.End < b.End;
-
-            if (lunchInsideBlock && lunchInfo != null)
+            if (!b.Name.Contains("Advisory", StringComparison.OrdinalIgnoreCase) && hasMinis)
             {
-                var li = lunchInfo;
-                var preLunchItems = new List<ScheduleItem>();
-                var postLunchItems = new List<ScheduleItem>();
-
-                if (!isAdvisoryBlock && hasMinis)
-                {
-                    var minis = BellSchedule.GetMinisForBlock(configIndex!.Value, isAdvisory);
-                    if (minis != null)
-                    {
-                        var parts = rawClass!.Split('/', 2);
-                        var m1Class = parts[0].Trim();
-                        var m2Class = parts[1].Trim();
-
-                        foreach (var mini in minis)
-                        {
-                            if (mini.End <= li.Start)
-                            {
-                                preLunchItems.Add(new ScheduleItem(mini.Start, mini.End, $"{b.Name} ({mini.Name})", i, false, false, mini.Name == "M1" ? m1Class : m2Class));
-                            }
-                            else if (mini.Start >= li.End)
-                            {
-                                postLunchItems.Add(new ScheduleItem(mini.Start, mini.End, $"{b.Name} ({mini.Name})", i, false, true, mini.Name == "M1" ? m1Class : m2Class));
-                            }
-                        }
-                    }
-                    else
-                    {
-                        preLunchItems.Add(new ScheduleItem(b.Start, li.Start, b.Name, i, false, false, rawClass));
-                        postLunchItems.Add(new ScheduleItem(li.End, b.End, b.Name, i, false, true, rawClass));
-                    }
-                }
-                else
-                {
-                    preLunchItems.Add(new ScheduleItem(b.Start, li.Start, b.Name, i, false, false, rawClass));
-                    postLunchItems.Add(new ScheduleItem(li.End, b.End, b.Name, i, false, true, rawClass));
-                }
-
-                // Add items in correct order: pre-lunch → lunch → post-lunch
-                items.AddRange(preLunchItems);
-                items.Add(new ScheduleItem(li.Start, li.End, $"Lunch Wave {lunchWave}", -1, true, false, null));
-                items.AddRange(postLunchItems);
-                continue; // Skip normal block handling
-            }
-
-            // Normal block handling (no lunch inside)
-            if (!isAdvisoryBlock && hasMinis)
-            {
-                var minis = BellSchedule.GetMinisForBlock(configIndex!.Value, isAdvisory);
+                var minis = BellSchedule.GetMinisForApplicationBlock(i, _dayType);
                 if (minis != null)
                 {
                     var parts = rawClass!.Split('/', 2);
@@ -372,15 +340,29 @@ public partial class PopupForm : Form
             }
         }
 
-        // Insert lunch for cases where it falls between blocks (not inside)
-        if (lunchInfo != null && !items.Any(item => item.IsLunch))
+        foreach (var lunch in lunches)
         {
-            int insertIdx = items.FindIndex(item => item.Start > lunchInfo.Start);
-            if (insertIdx == -1) insertIdx = items.Count;
-            items.Insert(insertIdx, new ScheduleItem(lunchInfo.Start, lunchInfo.End, $"Lunch Wave {lunchWave}", -1, true, false, null));
+            var adjusted = new List<ScheduleItem>();
+            foreach (var item in items)
+            {
+                if (item.IsLunch || item.End <= lunch.Info.Start || item.Start >= lunch.Info.End)
+                {
+                    adjusted.Add(item);
+                    continue;
+                }
+                if (item.Start < lunch.Info.Start)
+                    adjusted.Add(item with { End = lunch.Info.Start });
+                if (item.End > lunch.Info.End)
+                    adjusted.Add(item with { Start = lunch.Info.End, IsAfterLunch = true });
+            }
+            adjusted.Add(new ScheduleItem(lunch.Info.Start, lunch.Info.End, $"Lunch Wave {lunch.Wave}", -1, true, false, null));
+            items = adjusted;
         }
 
-        return items;
+        return items
+            .OrderBy(item => item.Start)
+            .ThenByDescending(item => item.IsLunch)
+            .ToList();
     }
 
     private void BuildScheduleControls(List<ScheduleItem> items, TimeSpan now, string? dayLetter)
@@ -537,6 +519,7 @@ public partial class PopupForm : Form
     }
 
     private record ScheduleItem(TimeSpan Start, TimeSpan End, string Name, int BlockIndex, bool IsLunch, bool IsAfterLunch, string? MiniClassName);
+    private record LunchPeriod(BellSchedule.LunchInfo Info, int Wave);
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {

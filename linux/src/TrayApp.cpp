@@ -243,7 +243,7 @@ void TrayApp::updateTrayTooltip()
     const auto current = BellSchedule::currentBlock(now, m_currentDayType);
     QString tooltip;
     if (current.current.has_value()) {
-        const auto letter = BellSchedule::extractDayLetter(m_currentDayType);
+        const auto letter = BellSchedule::configDayLetter(current.index, m_currentDayType);
         const auto index = BellSchedule::configBlockIndex(current.index, m_currentDayType);
         const auto className = letter.has_value() && index.has_value()
             ? m_config.className(*letter, *index)

@@ -19,6 +19,7 @@ struct ScheduleDefinition {
 struct ScheduleDocument {
     ScheduleDefinition regular;
     ScheduleDefinition advisory;
+    ScheduleDefinition allPeriods;
 };
 
 QTime parseTime(const QJsonValue &value)
@@ -86,7 +87,8 @@ ScheduleDocument loadSchedule()
     const auto root = document.object();
     return {
         parseDefinition(root.value(QStringLiteral("regular")).toObject()),
-        parseDefinition(root.value(QStringLiteral("advisory")).toObject())
+        parseDefinition(root.value(QStringLiteral("advisory")).toObject()),
+        parseDefinition(root.value(QStringLiteral("allPeriods")).toObject())
     };
 }
 
@@ -101,11 +103,25 @@ const ScheduleDefinition &definitionFor(bool advisory)
     return advisory ? schedule().advisory : schedule().regular;
 }
 
+const ScheduleDefinition &definitionFor(const QString &dayType)
+{
+    if (BellSchedule::isAllPeriodsDay(dayType))
+        return schedule().allPeriods;
+    return definitionFor(BellSchedule::isAdvisoryDay(dayType));
+}
+
 } // namespace
 
 QVector<TimeBlock> BellSchedule::blocksForDayType(const QString &dayType)
 {
-    return definitionFor(isAdvisoryDay(dayType)).blocks;
+    return definitionFor(dayType).blocks;
+}
+
+QVector<MiniBlock> BellSchedule::minisForApplicationBlock(int applicationBlockIndex, const QString &dayType)
+{
+    if (applicationBlockIndex < 0)
+        return {};
+    return definitionFor(dayType).minis.value(applicationBlockIndex);
 }
 
 QVector<MiniBlock> BellSchedule::minisForBlock(int academicBlockIndex, bool advisory)
@@ -139,18 +155,12 @@ CurrentBlockResult BellSchedule::currentBlock(const QTime &now, const QString &d
 std::optional<CurrentMiniResult> BellSchedule::currentMini(const QTime &now, const QString &dayType)
 {
     const auto blocks = blocksForDayType(dayType);
-    const bool advisory = isAdvisoryDay(dayType);
-
     for (int applicationIndex = 0; applicationIndex < blocks.size(); ++applicationIndex) {
         const auto &block = blocks.at(applicationIndex);
         if (now < block.start || now >= block.end)
             continue;
 
-        const auto academicIndex = configBlockIndex(applicationIndex, dayType);
-        if (!academicIndex.has_value())
-            return std::nullopt;
-
-        const auto minis = minisForBlock(*academicIndex, advisory);
+        const auto minis = minisForApplicationBlock(applicationIndex, dayType);
         for (const auto &mini : minis) {
             if (now >= mini.start && now < mini.end)
                 return CurrentMiniResult{mini, now.secsTo(mini.end)};
@@ -159,6 +169,16 @@ std::optional<CurrentMiniResult> BellSchedule::currentMini(const QTime &now, con
     }
 
     return std::nullopt;
+}
+
+std::optional<LunchInfo> BellSchedule::lunchInfo(std::optional<int> wave, const QString &dayType)
+{
+    if (!wave.has_value() || *wave < 1 || *wave > 4)
+        return std::nullopt;
+
+    const auto &lunches = definitionFor(dayType).lunches;
+    const auto it = lunches.constFind(*wave);
+    return it == lunches.constEnd() ? std::nullopt : std::optional<LunchInfo>(it.value());
 }
 
 std::optional<LunchInfo> BellSchedule::lunchInfo(std::optional<int> wave, bool advisory)
@@ -176,6 +196,12 @@ bool BellSchedule::isAdvisoryDay(const QString &dayType)
     return dayType.contains(QStringLiteral("Advisory"), Qt::CaseInsensitive);
 }
 
+bool BellSchedule::isAllPeriodsDay(const QString &dayType)
+{
+    return dayType.contains(QStringLiteral("All periods meet"), Qt::CaseInsensitive) ||
+        dayType.contains(QStringLiteral("First Day of Classes"), Qt::CaseInsensitive);
+}
+
 std::optional<QString> BellSchedule::extractDayLetter(const QString &dayType)
 {
     for (const auto &letter : {QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C"),
@@ -187,11 +213,32 @@ std::optional<QString> BellSchedule::extractDayLetter(const QString &dayType)
     return std::nullopt;
 }
 
+std::optional<QString> BellSchedule::configDayLetter(int applicationBlockIndex, const QString &dayType)
+{
+    if (isAllPeriodsDay(dayType)) {
+        if (applicationBlockIndex >= 0 && applicationBlockIndex < 4)
+            return QStringLiteral("A");
+        if (applicationBlockIndex >= 4 && applicationBlockIndex < 8)
+            return QStringLiteral("B");
+        return std::nullopt;
+    }
+    return extractDayLetter(dayType);
+}
+
+std::optional<QString> BellSchedule::lunchDayLetter(const QString &dayType)
+{
+    return isAllPeriodsDay(dayType)
+        ? std::optional<QString>(QStringLiteral("B"))
+        : extractDayLetter(dayType);
+}
+
 std::optional<int> BellSchedule::configBlockIndex(int applicationBlockIndex, const QString &dayType)
 {
     const auto blocks = blocksForDayType(dayType);
     if (applicationBlockIndex < 0 || applicationBlockIndex >= blocks.size())
         return std::nullopt;
+    if (isAllPeriodsDay(dayType))
+        return applicationBlockIndex % 4;
     if (blocks.at(applicationBlockIndex).name.contains(QStringLiteral("Advisory"), Qt::CaseInsensitive))
         return std::nullopt;
 

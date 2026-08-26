@@ -38,14 +38,17 @@ private:
         QString className;
     };
 
+    struct LunchPeriod {
+        LunchInfo info;
+        int wave = 0;
+    };
+
     void updateMainStatus(const QTime &now,
                          const QVector<TimeBlock> &blocks,
                          const CurrentBlockResult &current,
-                         const std::optional<LunchInfo> &lunch);
+                         const QVector<LunchPeriod> &lunches);
     QVector<ScheduleItem> buildScheduleItems(const QVector<TimeBlock> &blocks,
-                                             const std::optional<LunchInfo> &lunch,
-                                             std::optional<int> lunchWave,
-                                             const std::optional<QString> &dayLetter) const;
+                                             const QVector<LunchPeriod> &lunches) const;
     void rebuildSchedule(const QVector<ScheduleItem> &items, const QTime &now);
     void updateScheduleHighlights(const QVector<ScheduleItem> &items, const QTime &now);
     void clearScheduleRows();

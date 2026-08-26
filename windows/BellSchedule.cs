@@ -23,6 +23,9 @@ public static class BellSchedule
 
         [JsonPropertyName("advisory")]
         public ScheduleDefinition Advisory { get; set; } = new();
+
+        [JsonPropertyName("allPeriods")]
+        public ScheduleDefinition AllPeriods { get; set; } = new();
     }
 
     private sealed class ScheduleDefinition
@@ -76,20 +79,39 @@ public static class BellSchedule
     private static readonly ScheduleDocument Document = LoadDocument();
     private static readonly TimeBlock[] RegularDay = ConvertBlocks(Document.Regular);
     private static readonly TimeBlock[] AdvisoryDay = ConvertBlocks(Document.Advisory);
+    private static readonly TimeBlock[] AllPeriodsDay = ConvertBlocks(Document.AllPeriods);
     private static readonly MiniBlock[][] RegularDayMinis = ConvertMinis(Document.Regular);
     private static readonly MiniBlock[][] AdvisoryDayMinis = ConvertMinis(Document.Advisory);
+    private static readonly MiniBlock[][] AllPeriodsDayMinis = ConvertMinis(Document.AllPeriods);
 
     public static TimeBlock[] GetBlocksForDayType(string? dayType)
     {
+        if (IsAllPeriodsDay(dayType))
+            return AllPeriodsDay;
         return IsAdvisoryDay(dayType) ? AdvisoryDay : RegularDay;
     }
 
     public static MiniBlock[]? GetMinisForBlock(int blockIndex, bool isAdvisory)
     {
-        var minis = isAdvisory ? AdvisoryDayMinis : RegularDayMinis;
-        if (blockIndex < 0 || blockIndex >= minis.Length)
+        if (blockIndex < 0)
             return null;
-        return minis[blockIndex];
+        var definition = isAdvisory ? Document.Advisory : Document.Regular;
+        var block = definition.Blocks
+            .Where(item => !item.Name.Contains("Advisory", StringComparison.OrdinalIgnoreCase))
+            .ElementAtOrDefault(blockIndex);
+        if (block == null)
+            return null;
+        return ConvertMinis(block);
+    }
+
+    public static MiniBlock[]? GetMinisForApplicationBlock(int applicationBlockIndex, string? dayType)
+    {
+        var minis = IsAllPeriodsDay(dayType)
+            ? AllPeriodsDayMinis
+            : IsAdvisoryDay(dayType) ? AdvisoryDayMinis : RegularDayMinis;
+        if (applicationBlockIndex < 0 || applicationBlockIndex >= minis.Length)
+            return null;
+        return minis[applicationBlockIndex];
     }
 
     public static (TimeBlock? Current, TimeSpan Remaining, int Index) GetCurrentBlock(TimeSpan now, string? dayType)
@@ -108,20 +130,13 @@ public static class BellSchedule
     public static (MiniBlock? CurrentMini, TimeSpan Remaining)? GetCurrentMini(TimeSpan now, string? dayType)
     {
         var blocks = GetBlocksForDayType(dayType);
-        var isAdvisory = IsAdvisoryDay(dayType);
-
         for (int i = 0; i < blocks.Length; i++)
         {
             var block = blocks[i];
             if (now < block.Start || now >= block.End)
                 continue;
 
-            // Advisory inserts a non-academic block, so map the schedule index
-            // before selecting the corresponding mini pair.
-            var academicIndex = GetConfigBlockIndex(i, dayType);
-            var minis = academicIndex.HasValue
-                ? GetMinisForBlock(academicIndex.Value, isAdvisory)
-                : null;
+            var minis = GetMinisForApplicationBlock(i, dayType);
 
             if (minis == null)
                 return null;
@@ -148,9 +163,29 @@ public static class BellSchedule
             : new LunchInfo(definition.Name, ParseTime(definition.Start), ParseTime(definition.End));
     }
 
+    public static LunchInfo? GetLunchInfo(int? wave, string? dayType)
+    {
+        if (!wave.HasValue || wave.Value < 1 || wave.Value > 4)
+            return null;
+
+        var schedule = IsAllPeriodsDay(dayType)
+            ? Document.AllPeriods
+            : IsAdvisoryDay(dayType) ? Document.Advisory : Document.Regular;
+        var definition = schedule.LunchWaves
+            .GetValueOrDefault(wave.Value.ToString(CultureInfo.InvariantCulture));
+        return definition == null
+            ? null
+            : new LunchInfo(definition.Name, ParseTime(definition.Start), ParseTime(definition.End));
+    }
+
     public static bool IsAdvisoryDay(string? dayType) =>
         !string.IsNullOrWhiteSpace(dayType) &&
         dayType.Contains("Advisory", StringComparison.OrdinalIgnoreCase);
+
+    public static bool IsAllPeriodsDay(string? dayType) =>
+        !string.IsNullOrWhiteSpace(dayType) &&
+        (dayType.Contains("All periods meet", StringComparison.OrdinalIgnoreCase) ||
+         dayType.Contains("First Day of Classes", StringComparison.OrdinalIgnoreCase));
 
     public static string? ExtractDayLetter(string? dayType)
     {
@@ -166,6 +201,22 @@ public static class BellSchedule
         return null;
     }
 
+    public static string? GetConfigDayLetter(int applicationBlockIndex, string? dayType)
+    {
+        if (IsAllPeriodsDay(dayType))
+        {
+            if (applicationBlockIndex is >= 0 and < 4)
+                return "A";
+            if (applicationBlockIndex is >= 4 and < 8)
+                return "B";
+            return null;
+        }
+        return ExtractDayLetter(dayType);
+    }
+
+    public static string? GetLunchDayLetter(string? dayType) =>
+        IsAllPeriodsDay(dayType) ? "B" : ExtractDayLetter(dayType);
+
     /// <summary>
     /// Maps an application block index to the four academic blocks stored in
     /// the user's configuration. Advisory itself intentionally has no class
@@ -176,6 +227,8 @@ public static class BellSchedule
         var blocks = GetBlocksForDayType(dayType);
         if (appBlockIndex < 0 || appBlockIndex >= blocks.Length)
             return null;
+        if (IsAllPeriodsDay(dayType))
+            return appBlockIndex % 4;
         if (blocks[appBlockIndex].Name.Contains("Advisory", StringComparison.OrdinalIgnoreCase))
             return null;
 
@@ -236,10 +289,12 @@ public static class BellSchedule
 
     private static MiniBlock[][] ConvertMinis(ScheduleDefinition definition) =>
         definition.Blocks
-            .Where(block => !block.Name.Contains("Advisory", StringComparison.OrdinalIgnoreCase))
-            .Select(block => block.Minis
-                .Select(mini => new MiniBlock(mini.Name, ParseTime(mini.Start), ParseTime(mini.End)))
-                .ToArray())
+            .Select(ConvertMinis)
+            .ToArray();
+
+    private static MiniBlock[] ConvertMinis(BlockDefinition block) =>
+        block.Minis
+            .Select(mini => new MiniBlock(mini.Name, ParseTime(mini.Start), ParseTime(mini.End)))
             .ToArray();
 
     private static TimeSpan ParseTime(string value) =>

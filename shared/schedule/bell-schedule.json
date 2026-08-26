@@ -97,5 +97,87 @@
       "3": { "name": "Lunch", "start": "11:54", "end": "12:22" },
       "4": { "name": "Lunch", "start": "12:24", "end": "12:52" }
     }
+  },
+  "allPeriods": {
+    "blocks": [
+      {
+        "name": "Period 2",
+        "start": "07:40",
+        "end": "08:20",
+        "minis": [
+          { "name": "M1", "start": "07:40", "end": "07:57" },
+          { "name": "M2", "start": "08:03", "end": "08:20" }
+        ]
+      },
+      {
+        "name": "Period 4",
+        "start": "08:25",
+        "end": "09:05",
+        "minis": [
+          { "name": "M1", "start": "08:25", "end": "08:42" },
+          { "name": "M2", "start": "08:48", "end": "09:05" }
+        ]
+      },
+      {
+        "name": "Period 6",
+        "start": "09:10",
+        "end": "09:50",
+        "minis": [
+          { "name": "M1", "start": "09:10", "end": "09:27" },
+          { "name": "M2", "start": "09:33", "end": "09:50" }
+        ]
+      },
+      {
+        "name": "Period 8",
+        "start": "09:55",
+        "end": "10:35",
+        "minis": [
+          { "name": "M1", "start": "09:55", "end": "10:12" },
+          { "name": "M2", "start": "10:18", "end": "10:35" }
+        ]
+      },
+      {
+        "name": "Period 1",
+        "start": "10:40",
+        "end": "12:05",
+        "minis": [
+          { "name": "M1", "start": "10:40", "end": "11:07" },
+          { "name": "M2", "start": "11:13", "end": "11:40" }
+        ]
+      },
+      {
+        "name": "Period 3",
+        "start": "12:10",
+        "end": "12:50",
+        "minis": [
+          { "name": "M1", "start": "12:10", "end": "12:27" },
+          { "name": "M2", "start": "12:33", "end": "12:50" }
+        ]
+      },
+      {
+        "name": "Period 5",
+        "start": "12:55",
+        "end": "13:35",
+        "minis": [
+          { "name": "M1", "start": "12:55", "end": "13:12" },
+          { "name": "M2", "start": "13:18", "end": "13:35" }
+        ]
+      },
+      {
+        "name": "Period 7",
+        "start": "13:40",
+        "end": "14:20",
+        "minis": [
+          { "name": "M1", "start": "13:40", "end": "13:57" },
+          { "name": "M2", "start": "14:03", "end": "14:20" }
+        ]
+      }
+    ],
+    "lunchWaves": {
+      "1": { "name": "Lunch", "start": "10:40", "end": "11:10" },
+      "2": { "name": "Lunch", "start": "11:00", "end": "11:30" },
+      "3": { "name": "Lunch", "start": "11:20", "end": "11:50" },
+      "4": { "name": "Lunch", "start": "11:35", "end": "12:05" }
+    }
   }
 }

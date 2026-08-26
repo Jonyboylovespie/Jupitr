@@ -17,6 +17,7 @@ private slots:
     void scheduleUsesSharedTimes();
     void currentBlockAndMiniLookup();
     void advisoryIndexMappingAndLunch();
+    void allPeriodsScheduleMapping();
     void formattingAndDayLetters();
     void scraperFixtures();
     void scraperUsesCache();
@@ -81,6 +82,36 @@ void LogicTest::advisoryIndexMappingAndLunch()
     QCOMPARE(lunch->start, QTime(11, 54));
     QCOMPARE(lunch->end, QTime(12, 22));
     QVERIFY(!BellSchedule::lunchInfo(std::nullopt, false).has_value());
+}
+
+void LogicTest::allPeriodsScheduleMapping()
+{
+    const auto dayType = QStringLiteral("Special \"A\" Day Schedule-All Periods Meet");
+    QVERIFY(BellSchedule::isAllPeriodsDay(dayType));
+    QVERIFY(BellSchedule::isAllPeriodsDay(QStringLiteral("First Day of Classes: All periods meet")));
+
+    const auto blocks = BellSchedule::blocksForDayType(dayType);
+    QCOMPARE(blocks.size(), 8);
+    QCOMPARE(blocks.at(0).name, QStringLiteral("Period 2"));
+    QCOMPARE(blocks.at(4).name, QStringLiteral("Period 1"));
+    QCOMPARE(blocks.at(4).start, QTime(10, 40));
+    QCOMPARE(blocks.last().end, QTime(14, 20));
+
+    QCOMPARE(BellSchedule::configDayLetter(0, dayType).value(), QStringLiteral("A"));
+    QCOMPARE(BellSchedule::configDayLetter(4, dayType).value(), QStringLiteral("B"));
+    QCOMPARE(BellSchedule::configBlockIndex(0, dayType).value(), 0);
+    QCOMPARE(BellSchedule::configBlockIndex(4, dayType).value(), 0);
+    QCOMPARE(BellSchedule::lunchDayLetter(dayType).value(), QStringLiteral("B"));
+
+    const auto mini = BellSchedule::currentMini(QTime(12, 35), dayType);
+    QVERIFY(mini.has_value());
+    QCOMPARE(mini->current->name, QStringLiteral("M2"));
+    QCOMPARE(mini->current->end, QTime(12, 50));
+
+    const auto lunch = BellSchedule::lunchInfo(4, dayType);
+    QVERIFY(lunch.has_value());
+    QCOMPARE(lunch->start, QTime(11, 35));
+    QCOMPARE(lunch->end, QTime(12, 5));
 }
 
 void LogicTest::formattingAndDayLetters()
@@ -156,6 +187,10 @@ void LogicTest::configurationRoundTrip()
     auto config = ScheduleConfig::createDefault();
     config.setClasses(QStringLiteral("C"), {QStringLiteral("AP Physics / Spanish"), QStringLiteral("English"), {}, QStringLiteral("Lunch")});
     config.setLunchWave(QStringLiteral("C"), 4);
+    config.setClasses(QStringLiteral("H"), {QStringLiteral("Statistics"), QStringLiteral("Literature"), QStringLiteral("Wind/Physics"), QStringLiteral("Seminar")});
+    config.setAdditionalLunchWave(QStringLiteral("H"), 1);
+    config.setClasses(QStringLiteral("A"), {QString(), QString(), QStringLiteral("Free/Health"), QString()});
+    config.setAdditionalLunchWave(QStringLiteral("A"), 2);
     QVERIFY(config.save(path));
 
     const auto loaded = ScheduleConfig::load(path);
@@ -163,6 +198,10 @@ void LogicTest::configurationRoundTrip()
     QCOMPARE(loaded.className(QStringLiteral("C"), 1), QStringLiteral("English"));
     QCOMPARE(loaded.lunchWave(QStringLiteral("C")).value(), 4);
     QCOMPARE(loaded.lunchWave(QStringLiteral("A")).value(), 1);
+    QCOMPARE(loaded.additionalLunchWave(QStringLiteral("H")).value(), 1);
+    QVERIFY(!loaded.additionalLunchWave(QStringLiteral("A")).has_value());
+    QVERIFY(ScheduleConfig::supportsAdditionalLunch(QStringLiteral("Wind/Physics")));
+    QVERIFY(!ScheduleConfig::supportsAdditionalLunch(QStringLiteral("Free/Health")));
 }
 
 int main(int argc, char **argv)

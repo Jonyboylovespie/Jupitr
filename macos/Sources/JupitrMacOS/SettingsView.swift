@@ -20,7 +20,7 @@ struct SettingsView: View {
                 .font(.system(size: 21, weight: .bold))
                 .foregroundStyle(JupitrTheme.cream)
 
-            Text("Enter your classes and lunch wave for each day.")
+            Text("Enter your classes and lunch waves for each day.")
                 .font(.system(size: 13))
                 .foregroundStyle(JupitrTheme.muted)
 
@@ -31,7 +31,8 @@ struct SettingsView: View {
                     GridItem(.flexible(minimum: 120)),
                     GridItem(.flexible(minimum: 120)),
                     GridItem(.flexible(minimum: 120)),
-                    GridItem(.fixed(110))
+                    GridItem(.fixed(110)),
+                    GridItem(.fixed(145))
                 ],
                 alignment: .leading,
                 spacing: 8
@@ -46,6 +47,11 @@ struct SettingsView: View {
                 Text("Lunch")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(JupitrTheme.muted)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                Text("Additional Lunch\n(optional)")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(JupitrTheme.muted)
+                    .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity, alignment: .center)
 
                 ForEach(ScheduleConfig.dayLetters, id: \.self) { day in
@@ -67,6 +73,17 @@ struct SettingsView: View {
                     }
                     .labelsHidden()
                     .pickerStyle(.menu)
+
+                    Picker("Additional Lunch", selection: additionalLunchBinding(day: day)) {
+                        Text("None").tag(0)
+                        Text("Wave 1").tag(1)
+                        Text("Wave 2").tag(2)
+                        Text("Wave 3").tag(3)
+                        Text("Wave 4").tag(4)
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .disabled(!ScheduleConfig.supportsAdditionalLunch(draft.className(for: day, blockIndex: 2)))
                 }
             }
 
@@ -85,7 +102,7 @@ struct SettingsView: View {
             }
         }
         .padding(20)
-        .frame(minWidth: 860, minHeight: 440)
+        .frame(minWidth: 1020, minHeight: 440)
         .background(JupitrTheme.darkBackground)
         .preferredColorScheme(.dark)
         .onAppear {
@@ -116,6 +133,13 @@ struct SettingsView: View {
         Binding(
             get: { draft.lunchWaves[day] ?? 1 },
             set: { draft.setLunchWave($0, for: day) }
+        )
+    }
+
+    private func additionalLunchBinding(day: String) -> Binding<Int> {
+        Binding(
+            get: { draft.additionalLunchWaves[day] ?? 0 },
+            set: { draft.setAdditionalLunchWave($0, for: day) }
         )
     }
 }

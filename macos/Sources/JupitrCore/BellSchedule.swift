@@ -61,6 +61,7 @@ public struct BellSchedule: Sendable {
     private struct RawDocument: Decodable {
         let regular: RawDefinition
         let advisory: RawDefinition
+        let allPeriods: RawDefinition
     }
 
     private struct RawDefinition: Decodable {
@@ -89,6 +90,7 @@ public struct BellSchedule: Sendable {
 
     private let regular: RawSchedule
     private let advisory: RawSchedule
+    private let allPeriods: RawSchedule
 
     public init(data: Data) throws {
         let decoder = JSONDecoder()
@@ -97,6 +99,7 @@ public struct BellSchedule: Sendable {
         }
         self.regular = try Self.convert(document.regular)
         self.advisory = try Self.convert(document.advisory)
+        self.allPeriods = try Self.convert(document.allPeriods)
     }
 
     public static func load() throws -> BellSchedule {
@@ -122,6 +125,12 @@ public struct BellSchedule: Sendable {
         return []
     }
 
+    public func minis(forApplicationBlockIndex index: Int, dayType: String) -> [MiniBlock] {
+        let blocks = definition(for: dayType).blocks
+        guard blocks.indices.contains(index) else { return [] }
+        return blocks[index].minis
+    }
+
     public func currentBlock(at secondsSinceMidnight: Int, dayType: String) -> CurrentBlock {
         let blocks = blocks(for: dayType)
         for (index, block) in blocks.enumerated() {
@@ -143,8 +152,6 @@ public struct BellSchedule: Sendable {
         dayType: String
     ) -> CurrentMini? {
         let blocks = blocks(for: dayType)
-        let advisory = Self.isAdvisoryDay(dayType)
-
         for (applicationIndex, block) in blocks.enumerated() {
             let blockStart = block.startMinute * 60
             let blockEnd = block.endMinute * 60
@@ -152,14 +159,7 @@ public struct BellSchedule: Sendable {
                 continue
             }
 
-            guard let academicIndex = configBlockIndex(
-                applicationBlockIndex: applicationIndex,
-                dayType: dayType
-            ) else {
-                return nil
-            }
-
-            for mini in minis(for: academicIndex, advisory: advisory) {
+            for mini in minis(forApplicationBlockIndex: applicationIndex, dayType: dayType) {
                 let start = mini.startMinute * 60
                 let end = mini.endMinute * 60
                 if secondsSinceMidnight >= start && secondsSinceMidnight < end {
@@ -177,12 +177,35 @@ public struct BellSchedule: Sendable {
         return lunches[wave]
     }
 
+    public func lunchInfo(wave: Int?, dayType: String) -> LunchInfo? {
+        guard let wave, (1...4).contains(wave) else { return nil }
+        return definition(for: dayType).lunches[wave]
+    }
+
     public static func isAdvisoryDay(_ dayType: String) -> Bool {
         dayType.localizedCaseInsensitiveContains("Advisory")
     }
 
+    public static func isAllPeriodsDay(_ dayType: String) -> Bool {
+        dayType.localizedCaseInsensitiveContains("All periods meet") ||
+            dayType.localizedCaseInsensitiveContains("First Day of Classes")
+    }
+
     public static func extractDayLetter(_ dayType: String) -> String? {
         dayLetters.first { dayType.range(of: "\($0) Day", options: .caseInsensitive) != nil }
+    }
+
+    public static func configDayLetter(applicationBlockIndex: Int, dayType: String) -> String? {
+        if isAllPeriodsDay(dayType) {
+            if (0..<4).contains(applicationBlockIndex) { return "A" }
+            if (4..<8).contains(applicationBlockIndex) { return "B" }
+            return nil
+        }
+        return extractDayLetter(dayType)
+    }
+
+    public static func lunchDayLetter(_ dayType: String) -> String? {
+        isAllPeriodsDay(dayType) ? "B" : extractDayLetter(dayType)
     }
 
     public func configBlockIndex(
@@ -191,6 +214,9 @@ public struct BellSchedule: Sendable {
     ) -> Int? {
         let blocks = blocks(for: dayType)
         guard blocks.indices.contains(applicationBlockIndex) else { return nil }
+        if Self.isAllPeriodsDay(dayType) {
+            return applicationBlockIndex % 4
+        }
         guard !blocks[applicationBlockIndex].name.localizedCaseInsensitiveContains("Advisory") else {
             return nil
         }
@@ -229,7 +255,8 @@ public struct BellSchedule: Sendable {
     }
 
     private func definition(for dayType: String) -> RawSchedule {
-        Self.isAdvisoryDay(dayType) ? advisory : regular
+        if Self.isAllPeriodsDay(dayType) { return allPeriods }
+        return Self.isAdvisoryDay(dayType) ? advisory : regular
     }
 
     private static func convert(_ definition: RawDefinition) throws -> RawSchedule {

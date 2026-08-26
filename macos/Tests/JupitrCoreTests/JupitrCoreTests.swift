@@ -47,6 +47,34 @@ final class JupitrCoreTests: XCTestCase {
         XCTAssertNil(schedule.lunchInfo(wave: nil, advisory: false))
     }
 
+    func testAllPeriodsScheduleMapping() throws {
+        let schedule = try BellSchedule.load()
+        let dayType = "Special \"A\" Day Schedule-All Periods Meet"
+        XCTAssertTrue(BellSchedule.isAllPeriodsDay(dayType))
+        XCTAssertTrue(BellSchedule.isAllPeriodsDay("First Day of Classes: All periods meet"))
+
+        let blocks = schedule.blocks(for: dayType)
+        XCTAssertEqual(blocks.count, 8)
+        XCTAssertEqual(blocks[0].name, "Period 2")
+        XCTAssertEqual(blocks[4].name, "Period 1")
+        XCTAssertEqual(blocks[4].startMinute, 10 * 60 + 40)
+        XCTAssertEqual(blocks[7].endMinute, 14 * 60 + 20)
+
+        XCTAssertEqual(BellSchedule.configDayLetter(applicationBlockIndex: 0, dayType: dayType), "A")
+        XCTAssertEqual(BellSchedule.configDayLetter(applicationBlockIndex: 4, dayType: dayType), "B")
+        XCTAssertEqual(schedule.configBlockIndex(applicationBlockIndex: 0, dayType: dayType), 0)
+        XCTAssertEqual(schedule.configBlockIndex(applicationBlockIndex: 4, dayType: dayType), 0)
+        XCTAssertEqual(BellSchedule.lunchDayLetter(dayType), "B")
+
+        let mini = schedule.currentMini(at: 12 * 3600 + 35 * 60, dayType: dayType)
+        XCTAssertEqual(mini?.mini.name, "M2")
+        XCTAssertEqual(mini?.mini.endMinute, 12 * 60 + 50)
+
+        let lunch = schedule.lunchInfo(wave: 4, dayType: dayType)
+        XCTAssertEqual(lunch?.startMinute, 11 * 60 + 35)
+        XCTAssertEqual(lunch?.endMinute, 12 * 60 + 5)
+    }
+
     func testFormattingAndDayLetters() {
         XCTAssertEqual(BellSchedule.formatRemaining(3723), "1h 2m 3s")
         XCTAssertEqual(BellSchedule.formatRemaining(125), "2m 5s")
@@ -94,6 +122,10 @@ final class JupitrCoreTests: XCTestCase {
         config.setClass("AP Physics / Spanish", for: "C", blockIndex: 0)
         config.setClass("English", for: "C", blockIndex: 1)
         config.setLunchWave(4, for: "C")
+        config.setClass("Wind/Physics", for: "H", blockIndex: 2)
+        config.setAdditionalLunchWave(1, for: "H")
+        config.setClass("Free/Health", for: "A", blockIndex: 2)
+        config.setAdditionalLunchWave(2, for: "A")
         try config.save(to: path)
 
         let loaded = ScheduleConfig.load(from: path)
@@ -101,6 +133,10 @@ final class JupitrCoreTests: XCTestCase {
         XCTAssertEqual(loaded.className(for: "C", blockIndex: 1), "English")
         XCTAssertEqual(loaded.lunchWave(for: "C"), 4)
         XCTAssertEqual(loaded.lunchWave(for: "A"), 1)
+        XCTAssertEqual(loaded.additionalLunchWave(for: "H"), 1)
+        XCTAssertNil(loaded.additionalLunchWave(for: "A"))
+        XCTAssertTrue(ScheduleConfig.supportsAdditionalLunch("Wind/Physics"))
+        XCTAssertFalse(ScheduleConfig.supportsAdditionalLunch("Free/Health"))
     }
 
     private func fixture(named name: String) throws -> String {

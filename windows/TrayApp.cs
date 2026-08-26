@@ -100,7 +100,6 @@ public class TrayApp : ApplicationContext
 
     private void UpdateTrayTooltip(DateTime now)
     {
-        var dayLetter = BellSchedule.ExtractDayLetter(_currentDayType);
         var blocks = BellSchedule.GetBlocksForDayType(_currentDayType);
         var (current, remaining, index) = BellSchedule.GetCurrentBlock(now.TimeOfDay, _currentDayType);
 
@@ -108,6 +107,7 @@ public class TrayApp : ApplicationContext
         if (current != null)
         {
             var configIndex = BellSchedule.GetConfigBlockIndex(index, _currentDayType);
+            var dayLetter = BellSchedule.GetConfigDayLetter(index, _currentDayType);
             var className = configIndex.HasValue && dayLetter != null
                 ? _config.GetClass(dayLetter, configIndex.Value)
                 : null;
