@@ -31,7 +31,7 @@ public:
 private:
     void showPopup();
     void showSettings();
-    void requestDayType(const QDate &date);
+    void requestDayType(const QDate &date, bool force = false);
     void updateTrayTooltip();
     void positionPopup();
 
@@ -48,6 +48,8 @@ private:
     QPoint m_popupAnchor;
     QString m_currentDayType = QStringLiteral("Loading...");
     QDate m_lastCheckedDate;
+    QDate m_lastAttemptedDate;
+    bool m_dayTypeRequestInFlight = false;
     QTimer m_updateTimer;
 };
 

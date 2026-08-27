@@ -12,6 +12,7 @@ public class TrayApp : ApplicationContext
     private SettingsForm? _settingsForm;
     private string _currentDayType = "Loading...";
     private DateTime _lastCheckedDate = DateTime.MinValue;
+    private DateTime _lastAttemptedDate = DateTime.MinValue;
     private readonly SynchronizationContext _uiContext;
     private int _dayTypeRefreshInProgress;
     private bool _disposed;
@@ -69,7 +70,7 @@ public class TrayApp : ApplicationContext
         // so the schedule stays accurate when the laptop is left running overnight.
         var now = DateTime.Now;
         if (_lastCheckedDate != now.Date)
-            RefreshDayType(now);
+            RefreshDayType(now, force: true);
 
         _popup.SetDayType(_currentDayType);
         _popup.RefreshData();
@@ -126,23 +127,33 @@ public class TrayApp : ApplicationContext
         _trayIcon.Text = tooltip.Length > 63 ? tooltip[..63] : tooltip;
     }
 
-    private void RefreshDayType(DateTime date)
+    private void RefreshDayType(DateTime date, bool force = false)
     {
+        if (_lastCheckedDate == date.Date || (!force && _lastAttemptedDate == date.Date))
+            return;
         if (Interlocked.Exchange(ref _dayTypeRefreshInProgress, 1) == 1)
             return;
+        _lastAttemptedDate = date.Date;
 
         _ = Task.Run(async () =>
         {
             try
             {
-                var dayType = await _scraper.GetDayTypeAsync(date).ConfigureAwait(false) ?? "Unknown";
+                var dayType = await _scraper.GetDayTypeAsync(date).ConfigureAwait(false);
                 _uiContext.Post(_ =>
                 {
                     if (_disposed)
                         return;
 
-                    _currentDayType = dayType;
-                    _lastCheckedDate = date.Date;
+                    if (dayType == null)
+                    {
+                        _currentDayType = "Unknown";
+                    }
+                    else
+                    {
+                        _currentDayType = dayType;
+                        _lastCheckedDate = date.Date;
+                    }
                     _popup?.SetDayType(_currentDayType);
                     _popup?.RefreshData();
                     UpdateTrayTooltip(date);

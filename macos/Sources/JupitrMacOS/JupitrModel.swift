@@ -45,6 +45,7 @@ final class JupitrModel: NSObject, ObservableObject {
     private var updateTimer: Timer?
     private var dayRefreshTask: Task<Void, Never>?
     private var checkedDateKey: String?
+    private var attemptedDateKey: String?
     private var popupVisible = false
 
     init(schedule: BellSchedule? = nil, scraper: CalendarScraper = CalendarScraper()) {
@@ -277,6 +278,12 @@ final class JupitrModel: NSObject, ObservableObject {
         guard popupVisible != visible else { return }
         popupVisible = visible
         now = Date()
+        if visible {
+            let key = Self.dateKey(for: now)
+            if checkedDateKey != key {
+                refreshDayTypeIfNeeded(force: true)
+            }
+        }
         restartTimer()
     }
 
@@ -296,21 +303,38 @@ final class JupitrModel: NSObject, ObservableObject {
     private func refreshDayTypeIfNeeded(force: Bool = false) {
         let date = Date()
         let key = Self.dateKey(for: date)
-        guard force || key != checkedDateKey else { return }
+        if !force {
+            guard key != checkedDateKey, key != attemptedDateKey, dayRefreshTask == nil else { return }
+        } else {
+            dayRefreshTask?.cancel()
+            dayRefreshTask = nil
+        }
 
-        checkedDateKey = key
-        dayType = "Loading…"
-        dayRefreshTask?.cancel()
+        attemptedDateKey = key
+        if dayType != "Unknown" {
+            dayType = "Loading…"
+        }
         let scraper = scraper
         dayRefreshTask = Task { [weak self] in
             let result = await scraper.dayType(for: date)
             guard !Task.isCancelled else { return }
-            self?.receiveDayType(result)
+            self?.receiveDayType(result, forKey: key)
         }
     }
 
-    private func receiveDayType(_ result: String?) {
-        dayType = result ?? "Unknown"
+    private func receiveDayType(_ result: String?, forKey key: String) {
+        dayRefreshTask = nil
+        guard key == Self.dateKey(for: Date()) else {
+            refreshDayTypeIfNeeded(force: true)
+            return
+        }
+
+        if let result {
+            dayType = result
+            checkedDateKey = key
+        } else {
+            dayType = "Unknown"
+        }
     }
 
     private func configuredLunches(for dayType: String) -> [ConfiguredLunch] {

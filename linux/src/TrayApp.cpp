@@ -145,7 +145,7 @@ TrayApp::TrayApp(QObject *parent)
 
     connect(&m_updateTimer, &QTimer::timeout, this, [this]() {
         const auto today = QDate::currentDate();
-        if (today != m_lastCheckedDate)
+        if (today != m_lastAttemptedDate)
             requestDayType(today);
         updateTrayTooltip();
     });
@@ -169,7 +169,7 @@ void TrayApp::showPopup()
 
     const auto today = QDate::currentDate();
     if (today != m_lastCheckedDate)
-        requestDayType(today);
+        requestDayType(today, true);
 
     m_popup->setDayType(m_currentDayType);
     m_popup->refreshData();
@@ -209,14 +209,23 @@ void TrayApp::showSettings()
     m_settings->activateWindow();
 }
 
-void TrayApp::requestDayType(const QDate &date)
+void TrayApp::requestDayType(const QDate &date, bool force)
 {
-    if (!date.isValid() || date == m_lastCheckedDate)
+    if (!date.isValid() || date == m_lastCheckedDate || m_dayTypeRequestInFlight)
+        return;
+    if (!force && date == m_lastAttemptedDate)
         return;
 
+    m_lastAttemptedDate = date;
+    m_dayTypeRequestInFlight = true;
     m_scraper.getDayType(date, [this, date](const QString &dayType) {
-        m_lastCheckedDate = date;
-        m_currentDayType = dayType.isEmpty() ? QStringLiteral("Unknown") : dayType;
+        m_dayTypeRequestInFlight = false;
+        if (dayType.isEmpty()) {
+            m_currentDayType = QStringLiteral("Unknown");
+        } else {
+            m_currentDayType = dayType;
+            m_lastCheckedDate = date;
+        }
         if (m_popup) {
             m_popup->setDayType(m_currentDayType);
             if (m_popup->isVisible())
