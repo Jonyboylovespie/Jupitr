@@ -19,15 +19,12 @@ public enum SharedResources {
         try data(named: "bell-schedule", fileExtension: "json")
     }
 
-    public static func logoURL() -> URL? {
-        url(named: "jupitr", fileExtension: "svg")
+    public static func calendarData() throws -> Data {
+        try data(named: "letter-day-calendar", fileExtension: "json")
     }
 
-    public static func fixtureURL(named name: String) -> URL? {
-        let candidates = repositoryCandidates(
-            relativePath: "shared/test-data/calendar/\(name)"
-        )
-        return firstExistingURL(candidates)
+    public static func logoURL() -> URL? {
+        url(named: "jupitr", fileExtension: "svg")
     }
 
     public static func data(named name: String, fileExtension: String) throws -> Data {

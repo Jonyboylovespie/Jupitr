@@ -2,5 +2,6 @@
   <qresource prefix="/">
     <file alias="assets/jupitr.svg">../../shared/assets/jupitr.svg</file>
     <file alias="schedule/bell-schedule.json">../../shared/schedule/bell-schedule.json</file>
+    <file alias="schedule/letter-day-calendar.json">../../shared/schedule/letter-day-calendar.json</file>
   </qresource>
 </RCC>

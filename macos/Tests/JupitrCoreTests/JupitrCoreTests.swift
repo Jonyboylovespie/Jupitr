@@ -83,35 +83,21 @@ final class JupitrCoreTests: XCTestCase {
         XCTAssertNil(BellSchedule.extractDayLetter("Unknown"))
     }
 
-    func testScraperFixtures() throws {
-        let normal = try fixture(named: "normal-a-day.html")
-        let advisory = try fixture(named: "advisory-day.html")
-        let noDHS = try fixture(named: "no-dhs-entry.html")
-        let malformed = try fixture(named: "malformed.html")
+    func testOfficialLetterDayCalendar() async throws {
+        let data = try SharedResources.calendarData()
+        let days = try CalendarScraper.parseDayTypes(from: data)
+        XCTAssertEqual(days["2026-08-26"], "A Day - First Day of Classes")
+        XCTAssertTrue(BellSchedule.isAllPeriodsDay(days["2026-08-26"] ?? ""))
+        XCTAssertEqual(days["2026-08-28"], "C Day - Advisory Schedule")
+        XCTAssertEqual(days["2027-06-01"], "G Day")
 
-        XCTAssertEqual(
-            CalendarScraper.parseDayType(from: normal, targetDate: date(2026, 8, 19)),
-            "C Day"
-        )
-        XCTAssertEqual(
-            CalendarScraper.parseDayType(from: advisory, targetDate: date(2026, 8, 20)),
-            "D Day - Advisory Schedule"
-        )
-        XCTAssertNil(CalendarScraper.parseDayType(from: noDHS, targetDate: date(2026, 8, 21)))
-        XCTAssertNil(CalendarScraper.parseDayType(from: malformed, targetDate: date(2026, 8, 19)))
-    }
-
-    func testScraperUsesCache() async throws {
-        let directory = try temporaryDirectory()
-        let cache = directory.appendingPathComponent("calendar_cache.txt")
-        try "2026-08-22|Cached C Day\n".write(to: cache, atomically: true, encoding: .utf8)
-
-        let scraper = CalendarScraper(
-            calendarURL: URL(string: "http://127.0.0.1:1/")!,
-            dataRoot: directory
-        )
-        let result = await scraper.dayType(for: date(2026, 8, 22))
-        XCTAssertEqual(result, "Cached C Day")
+        let calendar = CalendarScraper()
+        let advisoryDay = await calendar.dayType(for: date(2026, 8, 28))
+        let noSchoolDay = await calendar.dayType(for: date(2026, 11, 3))
+        let outsideCalendar = await calendar.dayType(for: date(2028, 1, 1))
+        XCTAssertEqual(advisoryDay, "C Day - Advisory Schedule")
+        XCTAssertNil(noSchoolDay)
+        XCTAssertNil(outsideCalendar)
     }
 
     func testConfigurationRoundTrip() throws {
@@ -137,11 +123,6 @@ final class JupitrCoreTests: XCTestCase {
         XCTAssertNil(loaded.additionalLunchWave(for: "A"))
         XCTAssertTrue(ScheduleConfig.supportsAdditionalLunch("Wind/Physics"))
         XCTAssertFalse(ScheduleConfig.supportsAdditionalLunch("Free/Health"))
-    }
-
-    private func fixture(named name: String) throws -> String {
-        let url = try XCTUnwrap(SharedResources.fixtureURL(named: name))
-        return try String(contentsOf: url, encoding: .utf8)
     }
 
     private func date(_ year: Int, _ month: Int, _ day: Int) -> Date {

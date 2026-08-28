@@ -11,7 +11,7 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 include(CTest)
-find_package(Qt6 6.4 REQUIRED COMPONENTS Core DBus Gui Widgets Network Svg)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Core DBus Gui Widgets Svg)
 find_path(XCB_INCLUDE_DIR xcb/xcb.h REQUIRED)
 find_library(XCB_LIBRARY xcb PATH_SUFFIXES lib64 lib)
 if(NOT XCB_LIBRARY)
@@ -29,7 +29,7 @@ add_library(jupitr_core STATIC
     resources/jupitr.qrc
 )
 target_include_directories(jupitr_core PUBLIC include)
-target_link_libraries(jupitr_core PUBLIC Qt6::Core Qt6::Network)
+target_link_libraries(jupitr_core PUBLIC Qt6::Core)
 target_compile_features(jupitr_core PUBLIC cxx_std_20)
 
 qt_add_executable(jupitr
@@ -66,7 +66,5 @@ if(BUILD_TESTING)
     find_package(Qt6 6.4 REQUIRED COMPONENTS Test)
     add_executable(jupitr_tests tests/test_logic.cpp)
     target_link_libraries(jupitr_tests PRIVATE jupitr_core Qt6::Test)
-    target_compile_definitions(jupitr_tests PRIVATE
-        JUPITR_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../shared/test-data/calendar")
     add_test(NAME jupitr_tests COMMAND jupitr_tests)
 endif()

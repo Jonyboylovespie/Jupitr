@@ -25,17 +25,15 @@ Run the tray application with:
 
 It starts without a normal main window. Left-click the tray icon to show the popup and choose Quit from the tray menu to exit.
 
-## Configuration, cache, and logs
+## Configuration
 
 Qt's XDG-aware standard paths are used. With the normal application name, the locations are approximately:
 
 ```text
 ~/.config/jupitr/schedule.json
-~/.cache/jupitr/calendar_cache.txt
-~/.local/share/jupitr/scraper.log
 ```
 
-The exact base directories follow `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, and `XDG_DATA_HOME` when those variables are set.
+The exact base directory follows `XDG_CONFIG_HOME` when that variable is set. The bell schedule and official one-page letter-day calendar are packaged with the application.
 
 ## Desktop integration
 

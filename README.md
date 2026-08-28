@@ -4,7 +4,7 @@ Jupitr is a lightweight school-schedule tray application for Darien High School'
 
 ## Features
 
-- Automatic DHS day-type detection from the district calendar
+- DHS day types from the official one-page letter-day calendar
 - Current-class countdown and full daily schedule
 - Advisory-day support
 - Lunch-wave support, including no-lunch configuration
@@ -26,7 +26,7 @@ C++ / Qt 6, with Fedora KDE / Wayland as the primary target. See [Linux setup](d
 
 Swift 6 with AppKit and SwiftUI. See [macOS setup](docs/macos.md).
 
-All implementations use the authoritative schedule specification at [shared/schedule/bell-schedule.json](shared/schedule/bell-schedule.json). The platform implementations remain intentionally separate so each can follow native desktop conventions.
+All implementations use the authoritative bell schedule at [shared/schedule/bell-schedule.json](shared/schedule/bell-schedule.json) and the DHS one-page calendar data at [shared/schedule/letter-day-calendar.json](shared/schedule/letter-day-calendar.json). The platform implementations remain intentionally separate so each can follow native desktop conventions.
 
 ## Building
 
@@ -58,9 +58,8 @@ See the platform documentation for dependencies, testing, installation, and conf
 windows/                 .NET 8 WinForms implementation
 linux/                   Qt 6 implementation
 macos/                   Swift/AppKit/SwiftUI implementation
-shared/schedule/         cross-platform bell schedule
+shared/schedule/         cross-platform bell schedule and letter-day calendar
 shared/assets/           branding and icons
-shared/test-data/        offline parser fixtures
 docs/                    platform and architecture notes
 ```
 

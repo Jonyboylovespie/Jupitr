@@ -2,10 +2,7 @@
 #include "ScheduleConfig.h"
 #include "Scraper.h"
 
-#include <QFile>
-#include <QEventLoop>
 #include <QTemporaryDir>
-#include <QTimer>
 #include <QtTest/QtTest>
 
 using namespace jupitr;
@@ -19,22 +16,9 @@ private slots:
     void advisoryIndexMappingAndLunch();
     void allPeriodsScheduleMapping();
     void formattingAndDayLetters();
-    void scraperFixtures();
-    void scraperUsesCache();
-    void scraperHandlesNetworkFailure();
+    void officialLetterDayCalendar();
     void configurationRoundTrip();
-
-private:
-    static QString fixture(const QString &name);
 };
-
-QString LogicTest::fixture(const QString &name)
-{
-    QFile file(QStringLiteral(JUPITR_FIXTURE_DIR) + QLatin1Char('/') + name);
-    if (!file.open(QIODevice::ReadOnly))
-        qFatal("Could not open fixture: %s", qPrintable(file.errorString()));
-    return QString::fromUtf8(file.readAll());
-}
 
 void LogicTest::scheduleUsesSharedTimes()
 {
@@ -123,59 +107,16 @@ void LogicTest::formattingAndDayLetters()
     QVERIFY(!BellSchedule::extractDayLetter(QStringLiteral("Unknown")).has_value());
 }
 
-void LogicTest::scraperFixtures()
+void LogicTest::officialLetterDayCalendar()
 {
-    QCOMPARE(Scraper::parseDayTypeFromHtml(fixture(QStringLiteral("normal-a-day.html")), QDate(2026, 8, 19)),
-             QStringLiteral("C Day"));
-    QCOMPARE(Scraper::parseDayTypeFromHtml(fixture(QStringLiteral("advisory-day.html")), QDate(2026, 8, 20)),
-             QStringLiteral("D Day - Advisory Schedule"));
-    QVERIFY(Scraper::parseDayTypeFromHtml(fixture(QStringLiteral("no-dhs-entry.html")), QDate(2026, 8, 21)).isEmpty());
-    QVERIFY(Scraper::parseDayTypeFromHtml(fixture(QStringLiteral("malformed.html")), QDate(2026, 8, 19)).isEmpty());
-}
-
-void LogicTest::scraperUsesCache()
-{
-    QTemporaryDir directory;
-    QVERIFY(directory.isValid());
-    QFile cache(directory.filePath(QStringLiteral("calendar_cache.txt")));
-    QVERIFY(cache.open(QIODevice::WriteOnly | QIODevice::Text));
-    cache.write("2026-08-22|Cached C Day\n");
-    cache.close();
-
-    Scraper scraper(QUrl(QStringLiteral("http://127.0.0.1:1/")), directory.path());
-    QString result;
-    QEventLoop loop;
-    QTimer timeout;
-    timeout.setSingleShot(true);
-    timeout.setInterval(1000);
-    connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
-    scraper.getDayType(QDate(2026, 8, 22), [&result, &loop](const QString &dayType) {
-        result = dayType;
-        loop.quit();
-    });
-    timeout.start();
-    loop.exec();
-    QCOMPARE(result, QStringLiteral("Cached C Day"));
-}
-
-void LogicTest::scraperHandlesNetworkFailure()
-{
-    QTemporaryDir directory;
-    QVERIFY(directory.isValid());
-    Scraper scraper(QUrl(QStringLiteral("http://127.0.0.1:1/")), directory.path());
-    QString result = QStringLiteral("not-finished");
-    QEventLoop loop;
-    QTimer timeout;
-    timeout.setSingleShot(true);
-    timeout.setInterval(3000);
-    connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
-    scraper.getDayType(QDate(2026, 8, 23), [&result, &loop](const QString &dayType) {
-        result = dayType;
-        loop.quit();
-    });
-    timeout.start();
-    loop.exec();
-    QVERIFY(result.isEmpty());
+    const auto firstDay = Scraper::dayTypeForDate(QDate(2026, 8, 26));
+    QCOMPARE(firstDay, QStringLiteral("A Day - First Day of Classes"));
+    QVERIFY(BellSchedule::isAllPeriodsDay(firstDay));
+    QCOMPARE(Scraper::dayTypeForDate(QDate(2026, 8, 28)),
+             QStringLiteral("C Day - Advisory Schedule"));
+    QCOMPARE(Scraper::dayTypeForDate(QDate(2027, 6, 1)), QStringLiteral("G Day"));
+    QVERIFY(Scraper::dayTypeForDate(QDate(2026, 11, 3)).isEmpty());
+    QVERIFY(Scraper::dayTypeForDate(QDate(2028, 1, 1)).isEmpty());
 }
 
 void LogicTest::configurationRoundTrip()

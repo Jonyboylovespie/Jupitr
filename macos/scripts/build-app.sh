@@ -25,6 +25,7 @@ sed "s/__JUPITR_VERSION__/$VERSION/g" \
     "$MACOS_ROOT/Resources/Info.plist.template" \
     > "$APP_PATH/Contents/Info.plist"
 cp "$REPO_ROOT/shared/schedule/bell-schedule.json" "$APP_PATH/Contents/Resources/bell-schedule.json"
+cp "$REPO_ROOT/shared/schedule/letter-day-calendar.json" "$APP_PATH/Contents/Resources/letter-day-calendar.json"
 cp "$REPO_ROOT/shared/assets/jupitr.svg" "$APP_PATH/Contents/Resources/jupitr.svg"
 
 chmod +x "$APP_PATH/Contents/MacOS/Jupitr"

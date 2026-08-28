@@ -10,7 +10,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="HtmlAgilityPack" Version="1.12.4" />
     <PackageReference Include="System.Drawing.Common" Version="10.0.8" />
   </ItemGroup>
 
@@ -20,6 +19,12 @@
                       LogicalName="JupitrApp.bell-schedule.json" />
     <Content Include="..\shared\schedule\bell-schedule.json"
              Link="shared\schedule\bell-schedule.json"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+    <EmbeddedResource Include="..\shared\schedule\letter-day-calendar.json"
+                      LogicalName="JupitrApp.letter-day-calendar.json" />
+    <Content Include="..\shared\schedule\letter-day-calendar.json"
+             Link="shared\schedule\letter-day-calendar.json"
              CopyToOutputDirectory="PreserveNewest"
              CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>

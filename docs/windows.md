@@ -17,7 +17,7 @@ dotnet run --project windows/JupitrApp.csproj
 
 The application starts in the notification area. Left-click the tray icon to open the schedule popup; use the gear button to edit classes and lunch waves.
 
-## Configuration and cache
+## Configuration
 
 Existing Windows configuration remains at:
 
@@ -25,9 +25,7 @@ Existing Windows configuration remains at:
 %LOCALAPPDATA%\JupitrApp\schedule.json
 ```
 
-The calendar cache and scraper log are stored beside it under `%LOCALAPPDATA%\JupitrApp`.
-
-The shared bell schedule is embedded in the executable and also copied into published output under `shared\schedule\bell-schedule.json`, so the application does not depend on the repository being present at runtime.
+The shared bell schedule and official one-page letter-day calendar are embedded in the executable and copied into published output under `shared\schedule`, so the application does not depend on the repository being present at runtime or on the former district-calendar website.
 
 ## Packaging
 

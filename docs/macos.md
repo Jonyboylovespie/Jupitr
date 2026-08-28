@@ -25,17 +25,15 @@ swift run --package-path macos Jupitr
 
 The packaged app is an `LSUIElement` utility: it appears in the menu bar and does not create a Dock icon or ordinary main window.
 
-## Configuration, cache, and logs
+## Configuration
 
 Jupitr uses native macOS application directories:
 
 ```text
 ~/Library/Application Support/Jupitr/schedule.json
-~/Library/Caches/Jupitr/calendar_cache.txt
-~/Library/Application Support/Jupitr/scraper.log
 ```
 
-The schedule file is shared from `shared/schedule/bell-schedule.json` during development and copied into the app bundle during packaging. It is never duplicated as platform-specific schedule data.
+The bell schedule and official one-page letter-day calendar are shared from `shared/schedule` during development and copied into the app bundle during packaging. They are never duplicated as platform-specific data.
 
 ## Signing and release builds
 
