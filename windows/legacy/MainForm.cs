@@ -142,10 +142,10 @@ public partial class MainForm : Form
             _lblCurrent.Text = $"Current: {display}";
             _lblRemaining.Text = $"{BellSchedule.FormatRemaining(remaining)} left";
         }
-        else if (now.TimeOfDay < blocks[0].Start)
+        else if (blocks.FirstOrDefault(block => block.Start > now.TimeOfDay) is { } next)
         {
-            _lblCurrent.Text = "School hasn't started";
-            _lblRemaining.Text = $"{blocks[0].Name} at {BellSchedule.FormatTime(blocks[0].Start)}";
+            _lblCurrent.Text = "Up next";
+            _lblRemaining.Text = $"{next.Name} at {BellSchedule.FormatTime(next.Start)}";
         }
         else
         {

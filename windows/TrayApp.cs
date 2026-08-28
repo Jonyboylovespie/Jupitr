@@ -115,9 +115,9 @@ public class TrayApp : ApplicationContext
             var display = string.IsNullOrWhiteSpace(className) ? current.Name : className;
             tooltip = $"{display} — {BellSchedule.FormatRemaining(remaining)} left";
         }
-        else if (now.TimeOfDay < blocks[0].Start)
+        else if (blocks.FirstOrDefault(block => block.Start > now.TimeOfDay) is { } next)
         {
-            tooltip = $"Before school — {blocks[0].Name} at {BellSchedule.FormatTime(blocks[0].Start)}";
+            tooltip = $"Up next — {next.Name} at {BellSchedule.FormatTime(next.Start)}";
         }
         else
         {
