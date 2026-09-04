@@ -14,10 +14,16 @@ struct TimeBlock {
     QTime end;
 };
 
+struct ClassSegment {
+    QTime start;
+    QTime end;
+};
+
 struct LunchInfo {
     QString label;
     QTime start;
     QTime end;
+    QVector<ClassSegment> classSegments;
 };
 
 struct MiniBlock {

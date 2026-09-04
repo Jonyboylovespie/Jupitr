@@ -13,7 +13,8 @@ namespace JupitrApp;
 public static class BellSchedule
 {
     public record TimeBlock(string Name, TimeSpan Start, TimeSpan End);
-    public record LunchInfo(string Label, TimeSpan Start, TimeSpan End);
+    public record ClassSegment(TimeSpan Start, TimeSpan End);
+    public record LunchInfo(string Label, TimeSpan Start, TimeSpan End, IReadOnlyList<ClassSegment> ClassSegments);
     public record MiniBlock(string Name, TimeSpan Start, TimeSpan End);
 
     private sealed class ScheduleDocument
@@ -69,6 +70,18 @@ public static class BellSchedule
         [JsonPropertyName("name")]
         public string Name { get; set; } = "Lunch";
 
+        [JsonPropertyName("start")]
+        public string Start { get; set; } = string.Empty;
+
+        [JsonPropertyName("end")]
+        public string End { get; set; } = string.Empty;
+
+        [JsonPropertyName("classSegments")]
+        public List<ClassSegmentDefinition> ClassSegments { get; set; } = [];
+    }
+
+    private sealed class ClassSegmentDefinition
+    {
         [JsonPropertyName("start")]
         public string Start { get; set; } = string.Empty;
 
@@ -160,7 +173,7 @@ public static class BellSchedule
             .GetValueOrDefault(wave.Value.ToString(CultureInfo.InvariantCulture));
         return definition == null
             ? null
-            : new LunchInfo(definition.Name, ParseTime(definition.Start), ParseTime(definition.End));
+            : ConvertLunch(definition);
     }
 
     public static LunchInfo? GetLunchInfo(int? wave, string? dayType)
@@ -175,7 +188,7 @@ public static class BellSchedule
             .GetValueOrDefault(wave.Value.ToString(CultureInfo.InvariantCulture));
         return definition == null
             ? null
-            : new LunchInfo(definition.Name, ParseTime(definition.Start), ParseTime(definition.End));
+            : ConvertLunch(definition);
     }
 
     public static bool IsAdvisoryDay(string? dayType) =>
@@ -296,6 +309,15 @@ public static class BellSchedule
         block.Minis
             .Select(mini => new MiniBlock(mini.Name, ParseTime(mini.Start), ParseTime(mini.End)))
             .ToArray();
+
+    private static LunchInfo ConvertLunch(LunchDefinition lunch) =>
+        new(
+            lunch.Name,
+            ParseTime(lunch.Start),
+            ParseTime(lunch.End),
+            lunch.ClassSegments
+                .Select(segment => new ClassSegment(ParseTime(segment.Start), ParseTime(segment.End)))
+                .ToArray());
 
     private static TimeSpan ParseTime(string value) =>
         TimeSpan.ParseExact(value, "hh\\:mm", CultureInfo.InvariantCulture);

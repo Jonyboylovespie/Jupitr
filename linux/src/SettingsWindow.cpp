@@ -23,8 +23,8 @@ SettingsWindow::SettingsWindow(ScheduleConfig &config, QWidget *parent)
     : QWidget(parent), m_config(config)
 {
     setWindowTitle(QStringLiteral("Edit Schedule — Jupitr"));
-    setMinimumSize(780, 440);
-    resize(920, 540);
+    setMinimumSize(650, 440);
+    resize(760, 540);
 
     auto *root = new QVBoxLayout(this);
     root->setContentsMargins(20, 18, 20, 18);
@@ -34,7 +34,7 @@ SettingsWindow::SettingsWindow(ScheduleConfig &config, QWidget *parent)
     title->setStyleSheet(QStringLiteral("font-size: 20px; font-weight: 700;"));
     root->addWidget(title);
 
-    auto *subtitle = new QLabel(QStringLiteral("Enter your classes and lunch waves for each day"), this);
+    auto *subtitle = new QLabel(QStringLiteral("Enter your classes and lunch wave for each day"), this);
     subtitle->setStyleSheet(QStringLiteral("color: #B8A99A;"));
     root->addWidget(subtitle);
 
@@ -45,7 +45,6 @@ SettingsWindow::SettingsWindow(ScheduleConfig &config, QWidget *parent)
     for (int block = 0; block < 4; ++block)
         grid->setColumnStretch(block + 1, 1);
     grid->setColumnMinimumWidth(5, 100);
-    grid->setColumnMinimumWidth(6, 140);
 
     auto *emptyHeader = new QLabel(this);
     grid->addWidget(emptyHeader, 0, 0);
@@ -59,10 +58,6 @@ SettingsWindow::SettingsWindow(ScheduleConfig &config, QWidget *parent)
     lunchHeader->setAlignment(Qt::AlignCenter);
     lunchHeader->setStyleSheet(QStringLiteral("color: #B8A99A; font-weight: 700;"));
     grid->addWidget(lunchHeader, 0, 5);
-    auto *additionalLunchHeader = new QLabel(QStringLiteral("Additional Lunch\n(optional)"), this);
-    additionalLunchHeader->setAlignment(Qt::AlignCenter);
-    additionalLunchHeader->setStyleSheet(QStringLiteral("color: #B8A99A; font-weight: 700;"));
-    grid->addWidget(additionalLunchHeader, 0, 6);
 
     for (int dayIndex = 0; dayIndex < kDayLetters.size(); ++dayIndex) {
         const auto &day = kDayLetters.at(dayIndex);
@@ -75,11 +70,6 @@ SettingsWindow::SettingsWindow(ScheduleConfig &config, QWidget *parent)
             input->setPlaceholderText(QStringLiteral("Class name"));
             m_classInputs[dayIndex][block] = input;
             grid->addWidget(input, dayIndex + 1, block + 1);
-            if (block == 2) {
-                connect(input, &QLineEdit::textChanged, this, [this, dayIndex]() {
-                    updateAdditionalLunchState(dayIndex);
-                });
-            }
         }
 
         auto *lunch = new QComboBox(this);
@@ -88,11 +78,6 @@ SettingsWindow::SettingsWindow(ScheduleConfig &config, QWidget *parent)
         m_lunchInputs[dayIndex] = lunch;
         grid->addWidget(lunch, dayIndex + 1, 5);
 
-        auto *additionalLunch = new QComboBox(this);
-        additionalLunch->addItems({QStringLiteral("None"), QStringLiteral("Wave 1"), QStringLiteral("Wave 2"),
-                                   QStringLiteral("Wave 3"), QStringLiteral("Wave 4")});
-        m_additionalLunchInputs[dayIndex] = additionalLunch;
-        grid->addWidget(additionalLunch, dayIndex + 1, 6);
     }
     root->addLayout(grid, 1);
 
@@ -120,18 +105,7 @@ void SettingsWindow::loadValues()
             m_classInputs[dayIndex][block]->setText(m_config.className(day, block));
         const auto wave = m_config.lunchWave(day);
         m_lunchInputs[dayIndex]->setCurrentIndex(wave.value_or(0));
-        const auto additionalWave = m_config.additionalLunchWave(day);
-        m_additionalLunchInputs[dayIndex]->setCurrentIndex(additionalWave.value_or(0));
-        updateAdditionalLunchState(dayIndex);
     }
-}
-
-void SettingsWindow::updateAdditionalLunchState(int dayIndex)
-{
-    const bool enabled = ScheduleConfig::supportsAdditionalLunch(m_classInputs[dayIndex][2]->text());
-    m_additionalLunchInputs[dayIndex]->setEnabled(enabled);
-    if (!enabled)
-        m_additionalLunchInputs[dayIndex]->setCurrentIndex(0);
 }
 
 void SettingsWindow::saveAndClose()
@@ -146,10 +120,6 @@ void SettingsWindow::saveAndClose()
             classes.append(m_classInputs[dayIndex][block]->text());
         m_config.setClasses(days.at(dayIndex), classes);
         m_config.setLunchWave(days.at(dayIndex), m_lunchInputs[dayIndex]->currentIndex());
-        m_config.setAdditionalLunchWave(days.at(dayIndex),
-            m_additionalLunchInputs[dayIndex]->isEnabled()
-                ? m_additionalLunchInputs[dayIndex]->currentIndex()
-                : 0);
     }
 
     QString error;

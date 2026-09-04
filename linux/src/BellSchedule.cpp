@@ -59,10 +59,19 @@ ScheduleDefinition parseDefinition(const QJsonObject &object)
             continue;
 
         const auto lunch = it.value().toObject();
+        QVector<ClassSegment> classSegments;
+        for (const auto &segmentValue : lunch.value(QStringLiteral("classSegments")).toArray()) {
+            const auto segment = segmentValue.toObject();
+            classSegments.push_back({
+                parseTime(segment.value(QStringLiteral("start"))),
+                parseTime(segment.value(QStringLiteral("end")))
+            });
+        }
         definition.lunches.insert(wave, {
             lunch.value(QStringLiteral("name")).toString(QStringLiteral("Lunch")),
             parseTime(lunch.value(QStringLiteral("start"))),
-            parseTime(lunch.value(QStringLiteral("end")))
+            parseTime(lunch.value(QStringLiteral("end"))),
+            classSegments
         });
     }
 

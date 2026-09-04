@@ -25,6 +25,24 @@ public struct BellSchedule: Sendable {
         public let label: String
         public let startMinute: Int
         public let endMinute: Int
+        public let classSegments: [ClassSegment]
+
+        public init(
+            label: String,
+            startMinute: Int,
+            endMinute: Int,
+            classSegments: [ClassSegment] = []
+        ) {
+            self.label = label
+            self.startMinute = startMinute
+            self.endMinute = endMinute
+            self.classSegments = classSegments
+        }
+    }
+
+    public struct ClassSegment: Hashable, Sendable {
+        public let startMinute: Int
+        public let endMinute: Int
     }
 
     public struct CurrentBlock: Sendable {
@@ -84,6 +102,12 @@ public struct BellSchedule: Sendable {
 
     private struct RawLunch: Decodable {
         let name: String
+        let start: String
+        let end: String
+        let classSegments: [RawClassSegment]?
+    }
+
+    private struct RawClassSegment: Decodable {
         let start: String
         let end: String
     }
@@ -281,7 +305,13 @@ public struct BellSchedule: Sendable {
             lunches[wave] = LunchInfo(
                 label: rawLunch.name,
                 startMinute: try parseTime(rawLunch.start),
-                endMinute: try parseTime(rawLunch.end)
+                endMinute: try parseTime(rawLunch.end),
+                classSegments: try (rawLunch.classSegments ?? []).map { segment in
+                    ClassSegment(
+                        startMinute: try parseTime(segment.start),
+                        endMinute: try parseTime(segment.end)
+                    )
+                }
             )
         }
         return RawSchedule(blocks: blocks, lunches: lunches)

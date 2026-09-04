@@ -129,8 +129,22 @@ void PopupWindow::refreshData()
             lunches.append({*info, *wave});
     };
     if (lunchLetter.has_value()) {
-        addLunch(m_config.lunchWave(*lunchLetter));
-        addLunch(m_config.additionalLunchWave(*lunchLetter));
+        const auto blockThreeClass = m_config.className(*lunchLetter, 2);
+        if (!BellSchedule::isAllPeriodsDay(m_dayType) &&
+            ScheduleConfig::usesWindPhysicsLunch(blockThreeClass)) {
+            for (int applicationIndex = 0; applicationIndex < blocks.size(); ++applicationIndex) {
+                if (BellSchedule::configDayLetter(applicationIndex, m_dayType) != lunchLetter ||
+                    BellSchedule::configBlockIndex(applicationIndex, m_dayType) != std::optional<int>(2))
+                    continue;
+                const auto minis = BellSchedule::minisForApplicationBlock(applicationIndex, m_dayType);
+                if (!minis.isEmpty()) {
+                    lunches.append({{QStringLiteral("Lunch"), minis.first().start, minis.first().end, {}}, 0});
+                }
+                break;
+            }
+        } else {
+            addLunch(m_config.lunchWave(*lunchLetter));
+        }
     }
     const auto current = BellSchedule::currentBlock(now, m_dayType);
 
@@ -143,7 +157,8 @@ void PopupWindow::refreshData()
             const auto &a = items.at(i);
             const auto &b = m_lastItems.at(i);
             if (a.start != b.start || a.end != b.end || a.name != b.name ||
-                a.lunch != b.lunch || a.afterLunch != b.afterLunch || a.className != b.className) {
+                a.lunch != b.lunch || a.afterLunch != b.afterLunch || a.mini != b.mini ||
+                a.className != b.className) {
                 sameItems = false;
                 break;
             }
@@ -185,7 +200,9 @@ void PopupWindow::updateMainStatus(const QTime &now,
         });
         if (activeLunch != lunches.cend()) {
             setStatus(BellSchedule::formatRemaining(now.secsTo(activeLunch->info.end)),
-                      Theme::yellow(), QStringLiteral("Lunch Wave %1!").arg(activeLunch->wave));
+                      Theme::yellow(), activeLunch->wave > 0
+                          ? QStringLiteral("Lunch Wave %1!").arg(activeLunch->wave)
+                          : QStringLiteral("Lunch time!"));
             return;
         }
 
@@ -197,10 +214,44 @@ void PopupWindow::updateMainStatus(const QTime &now,
         if (nextLunch && nextLunch->info.start < block.end) {
             setStatus(BellSchedule::formatRemaining(now.secsTo(nextLunch->info.start)),
                       Theme::yellow(),
-                      QStringLiteral("Lunch Wave %1 starts at %2")
-                          .arg(nextLunch->wave)
-                          .arg(BellSchedule::formatTime(nextLunch->info.start)));
+                      nextLunch->wave > 0
+                          ? QStringLiteral("Lunch Wave %1 starts at %2")
+                                .arg(nextLunch->wave)
+                                .arg(BellSchedule::formatTime(nextLunch->info.start))
+                          : QStringLiteral("Lunch starts at %1").arg(BellSchedule::formatTime(nextLunch->info.start)));
             return;
+        }
+
+        if (!BellSchedule::isAllPeriodsDay(m_dayType) && configIndex == std::optional<int>(2) &&
+            ScheduleConfig::usesWindPhysicsLunch(rawClass)) {
+            const auto minis = BellSchedule::minisForApplicationBlock(current.index, m_dayType);
+            const auto waveFour = BellSchedule::lunchInfo(4, m_dayType);
+            const auto parts = rawClass.split(QLatin1Char('/'));
+            if (minis.size() >= 2 && now >= minis.at(1).start && now < minis.at(1).end) {
+                const int remaining = now.secsTo(minis.at(1).end);
+                setStatus(BellSchedule::formatRemaining(remaining),
+                          remaining < 5 * 60 ? Theme::yellow() : Theme::orange(),
+                          QStringLiteral("Current: %1 (%2) — ends %3")
+                              .arg(parts.value(1).trimmed(), minis.at(1).name,
+                                   BellSchedule::formatTime(minis.at(1).end)));
+                return;
+            }
+            if (minis.size() >= 2 && now >= minis.at(0).end && now < minis.at(1).start) {
+                setStatus(BellSchedule::formatRemaining(now.secsTo(minis.at(1).start)),
+                          Theme::muted(),
+                          QStringLiteral("%1 (%2) starts at %3")
+                              .arg(parts.value(1).trimmed(), minis.at(1).name,
+                                   BellSchedule::formatTime(minis.at(1).start)));
+                return;
+            }
+            if (waveFour.has_value() && now >= waveFour->start && now < waveFour->end) {
+                const int remaining = now.secsTo(waveFour->end);
+                setStatus(BellSchedule::formatRemaining(remaining),
+                          remaining < 5 * 60 ? Theme::yellow() : Theme::orange(),
+                          QStringLiteral("Current: %1 — ends %2")
+                              .arg(parts.value(0).trimmed(), BellSchedule::formatTime(waveFour->end)));
+                return;
+            }
         }
 
         const auto mini = BellSchedule::currentMini(now, m_dayType);
@@ -230,7 +281,9 @@ void PopupWindow::updateMainStatus(const QTime &now,
     });
     if (activeLunch != lunches.cend()) {
         setStatus(BellSchedule::formatRemaining(now.secsTo(activeLunch->info.end)),
-                  Theme::yellow(), QStringLiteral("Lunch Wave %1!").arg(activeLunch->wave));
+                  Theme::yellow(), activeLunch->wave > 0
+                      ? QStringLiteral("Lunch Wave %1!").arg(activeLunch->wave)
+                      : QStringLiteral("Lunch time!"));
     } else if (!blocks.isEmpty() && now < blocks.first().start) {
         setStatus(BellSchedule::formatRemaining(now.secsTo(blocks.first().start)),
                   Theme::muted(),
@@ -259,16 +312,29 @@ QVector<PopupWindow::ScheduleItem> PopupWindow::buildScheduleItems(
         const auto minis = configIndex.has_value()
             ? BellSchedule::minisForApplicationBlock(applicationIndex, m_dayType)
             : QVector<MiniBlock>();
-        if (hasMinis && minis.size() >= 2) {
+        if (!BellSchedule::isAllPeriodsDay(m_dayType) &&
+            ScheduleConfig::usesWindPhysicsLunch(rawClass) &&
+            configIndex == std::optional<int>(2) && minis.size() >= 2) {
+            const auto parts = rawClass.split(QLatin1Char('/'));
+            items.append({minis.at(1).start, minis.at(1).end,
+                          QStringLiteral("%1 (%2)").arg(block.name, minis.at(1).name),
+                          false, false, true, parts.value(1).trimmed()});
+            const auto waveFour = BellSchedule::lunchInfo(4, m_dayType);
+            if (waveFour.has_value()) {
+                items.append({waveFour->start, waveFour->end,
+                              QStringLiteral("%1 (Wave 4)").arg(block.name),
+                              false, false, false, parts.value(0).trimmed()});
+            }
+        } else if (hasMinis && minis.size() >= 2) {
             const auto parts = rawClass.split(QLatin1Char('/'));
             for (int miniIndex = 0; miniIndex < minis.size(); ++miniIndex) {
                 const auto &mini = minis.at(miniIndex);
                 items.append({mini.start, mini.end,
                               QStringLiteral("%1 (%2)").arg(block.name, mini.name),
-                              false, false, parts.value(miniIndex).trimmed()});
+                              false, false, true, parts.value(miniIndex).trimmed()});
             }
         } else {
-            items.append({block.start, block.end, block.name, false, false, rawClass});
+            items.append({block.start, block.end, block.name, false, false, false, rawClass});
         }
     }
 
@@ -277,6 +343,21 @@ QVector<PopupWindow::ScheduleItem> PopupWindow::buildScheduleItems(
         for (const auto &item : std::as_const(items)) {
             if (item.lunch || item.end <= lunch.info.start || item.start >= lunch.info.end) {
                 adjusted.append(item);
+                continue;
+            }
+            if (!item.mini && !lunch.info.classSegments.isEmpty()) {
+                for (const auto &segment : lunch.info.classSegments) {
+                    const auto start = item.start > segment.start ? item.start : segment.start;
+                    const auto end = item.end < segment.end ? item.end : segment.end;
+                    if (start >= end)
+                        continue;
+
+                    auto classItem = item;
+                    classItem.start = start;
+                    classItem.end = end;
+                    classItem.afterLunch = item.start < lunch.info.start && start >= lunch.info.end;
+                    adjusted.append(classItem);
+                }
                 continue;
             }
             if (item.start < lunch.info.start) {
@@ -292,7 +373,8 @@ QVector<PopupWindow::ScheduleItem> PopupWindow::buildScheduleItems(
             }
         }
         adjusted.append({lunch.info.start, lunch.info.end,
-                         QStringLiteral("Lunch Wave %1").arg(lunch.wave), true, false, {}});
+                         lunch.wave > 0 ? QStringLiteral("Lunch Wave %1").arg(lunch.wave)
+                                        : QStringLiteral("Lunch"), true, false, false, {}});
         items = std::move(adjusted);
     }
 

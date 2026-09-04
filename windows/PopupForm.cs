@@ -211,13 +211,35 @@ public partial class PopupForm : Form
         if (dayLetter == null)
             return periods;
 
-        foreach (var wave in new[] { _config.GetLunchWave(dayLetter), _config.GetAdditionalLunchWave(dayLetter) })
+        var blockThreeClass = _config.GetClass(dayLetter, 2);
+        if (!BellSchedule.IsAllPeriodsDay(_dayType) && ScheduleConfig.UsesWindPhysicsLunch(blockThreeClass))
         {
-            if (!wave.HasValue || periods.Any(period => period.Wave == wave.Value))
-                continue;
-            var info = BellSchedule.GetLunchInfo(wave, _dayType);
-            if (info != null)
-                periods.Add(new LunchPeriod(info, wave.Value));
+            var blocks = BellSchedule.GetBlocksForDayType(_dayType);
+            for (var applicationIndex = 0; applicationIndex < blocks.Length; applicationIndex++)
+            {
+                if (BellSchedule.GetConfigDayLetter(applicationIndex, _dayType) != dayLetter ||
+                    BellSchedule.GetConfigBlockIndex(applicationIndex, _dayType) != 2)
+                    continue;
+
+                var minis = BellSchedule.GetMinisForApplicationBlock(applicationIndex, _dayType);
+                if (minis is { Length: >= 1 })
+                {
+                    var lunch = new BellSchedule.LunchInfo(
+                        "Lunch",
+                        minis[0].Start,
+                        minis[0].End,
+                        Array.Empty<BellSchedule.ClassSegment>());
+                    periods.Add(new LunchPeriod(lunch, 0));
+                }
+                return periods;
+            }
+        }
+
+        var wave = _config.GetLunchWave(dayLetter);
+        var info = BellSchedule.GetLunchInfo(wave, _dayType);
+        if (wave.HasValue && info != null)
+        {
+            periods.Add(new LunchPeriod(info, wave.Value));
         }
         return periods;
     }
@@ -283,10 +305,42 @@ public partial class PopupForm : Form
                 hasMinis = !string.IsNullOrWhiteSpace(rawClass) && rawClass.Contains('/');
             }
 
-            if (!b.Name.Contains("Advisory", StringComparison.OrdinalIgnoreCase) && hasMinis)
+            if (!BellSchedule.IsAllPeriodsDay(_dayType) &&
+                ScheduleConfig.UsesWindPhysicsLunch(rawClass) && configIndex == 2)
             {
                 var minis = BellSchedule.GetMinisForApplicationBlock(i, _dayType);
-                if (minis != null)
+                var waveFour = BellSchedule.GetLunchInfo(4, _dayType);
+                if (minis is { Length: >= 2 } && waveFour != null)
+                {
+                    var parts = rawClass!.Split('/', 2);
+                    items.Add(new ScheduleItem(
+                        minis[1].Start,
+                        minis[1].End,
+                        $"{b.Name} ({minis[1].Name})",
+                        i,
+                        false,
+                        false,
+                        parts[1].Trim(),
+                        minis[1].Name));
+                    items.Add(new ScheduleItem(
+                        waveFour.Start,
+                        waveFour.End,
+                        $"{b.Name} (Wave 4)",
+                        i,
+                        false,
+                        false,
+                        parts[0].Trim(),
+                        null));
+                }
+                else
+                {
+                    items.Add(new ScheduleItem(b.Start, b.End, b.Name, i, false, false, rawClass, null));
+                }
+            }
+            else if (!b.Name.Contains("Advisory", StringComparison.OrdinalIgnoreCase) && hasMinis)
+            {
+                var minis = BellSchedule.GetMinisForApplicationBlock(i, _dayType);
+                if (minis is { Length: >= 2 })
                 {
                     var parts = rawClass!.Split('/', 2);
                     var m1Class = parts[0].Trim();
@@ -316,12 +370,31 @@ public partial class PopupForm : Form
                     adjusted.Add(item);
                     continue;
                 }
+                if (item.MiniName == null && lunch.Info.ClassSegments.Count > 0)
+                {
+                    foreach (var segment in lunch.Info.ClassSegments)
+                    {
+                        var start = item.Start > segment.Start ? item.Start : segment.Start;
+                        var end = item.End < segment.End ? item.End : segment.End;
+                        if (start >= end)
+                            continue;
+
+                        adjusted.Add(item with
+                        {
+                            Start = start,
+                            End = end,
+                            IsAfterLunch = item.Start < lunch.Info.Start && start >= lunch.Info.End
+                        });
+                    }
+                    continue;
+                }
                 if (item.Start < lunch.Info.Start)
                     adjusted.Add(item with { End = lunch.Info.Start });
                 if (item.End > lunch.Info.End)
                     adjusted.Add(item with { Start = lunch.Info.End, IsAfterLunch = true });
             }
-            adjusted.Add(new ScheduleItem(lunch.Info.Start, lunch.Info.End, $"Lunch Wave {lunch.Wave}", -1, true, false, null, null));
+            var lunchName = lunch.Wave == 0 ? "Lunch" : $"Lunch Wave {lunch.Wave}";
+            adjusted.Add(new ScheduleItem(lunch.Info.Start, lunch.Info.End, lunchName, -1, true, false, null, null));
             items = adjusted;
         }
 

@@ -21,10 +21,11 @@ struct ScheduleItem: Equatable, Identifiable {
     let className: String
     let isLunch: Bool
     let isAfterLunch: Bool
+    let isMini: Bool
     let isCurrent: Bool
 
     var id: String {
-        "\(startMinute)-\(endMinute)-\(name)-\(className)-\(isLunch)-\(isAfterLunch)"
+        "\(startMinute)-\(endMinute)-\(name)-\(className)-\(isLunch)-\(isAfterLunch)-\(isMini)"
     }
 }
 
@@ -100,9 +101,10 @@ final class JupitrModel: NSObject, ObservableObject {
             if let lunch = lunches.first(where: {
                 isWithin(seconds, startMinute: $0.info.startMinute, endMinute: $0.info.endMinute)
             }) {
+                let lunchName = lunch.wave == 0 ? "Lunch" : "Lunch Wave \(lunch.wave)"
                 return ScheduleStatus(
                     timer: BellSchedule.formatRemaining(lunch.info.endMinute * 60 - seconds),
-                    subtitle: "Lunch Wave \(lunch.wave)!",
+                    subtitle: "\(lunchName)!",
                     tone: .yellow
                 )
             }
@@ -110,11 +112,49 @@ final class JupitrModel: NSObject, ObservableObject {
             if let lunch = lunches
                 .filter({ $0.info.startMinute * 60 > seconds && $0.info.startMinute < block.endMinute })
                 .min(by: { $0.info.startMinute < $1.info.startMinute }) {
+                let lunchName = lunch.wave == 0 ? "Lunch" : "Lunch Wave \(lunch.wave)"
                 return ScheduleStatus(
                     timer: BellSchedule.formatRemaining(lunch.info.startMinute * 60 - seconds),
-                    subtitle: "Lunch Wave \(lunch.wave) starts at \(BellSchedule.formatTime(lunch.info.startMinute))",
+                    subtitle: "\(lunchName) starts at \(BellSchedule.formatTime(lunch.info.startMinute))",
                     tone: .yellow
                 )
+            }
+
+            if !BellSchedule.isAllPeriodsDay(dayType),
+               schedule.configBlockIndex(applicationBlockIndex: current.index, dayType: dayType) == 2,
+               ScheduleConfig.usesWindPhysicsLunch(rawClass) {
+                let minis = schedule.minis(forApplicationBlockIndex: current.index, dayType: dayType)
+                if minis.count >= 2 {
+                    let classParts = splitMiniClasses(rawClass)
+                    let physics = classParts[safe: 1] ?? "Physics"
+                    if isWithin(seconds, startMinute: minis[1].startMinute, endMinute: minis[1].endMinute) {
+                        let remaining = minis[1].endMinute * 60 - seconds
+                        return ScheduleStatus(
+                            timer: BellSchedule.formatRemaining(remaining),
+                            subtitle: "Current: \(physics) (\(minis[1].name)) — ends \(BellSchedule.formatTime(minis[1].endMinute))",
+                            tone: remaining < 5 * 60 ? .yellow : .orange
+                        )
+                    }
+
+                    if seconds >= minis[0].endMinute * 60 && seconds < minis[1].startMinute * 60 {
+                        return ScheduleStatus(
+                            timer: BellSchedule.formatRemaining(minis[1].startMinute * 60 - seconds),
+                            subtitle: "\(physics) (\(minis[1].name)) starts at \(BellSchedule.formatTime(minis[1].startMinute))",
+                            tone: .muted
+                        )
+                    }
+                }
+
+                if let waveFour = schedule.lunchInfo(wave: 4, dayType: dayType),
+                   isWithin(seconds, startMinute: waveFour.startMinute, endMinute: waveFour.endMinute) {
+                    let wind = splitMiniClasses(rawClass)[safe: 0] ?? "Wind"
+                    let remaining = waveFour.endMinute * 60 - seconds
+                    return ScheduleStatus(
+                        timer: BellSchedule.formatRemaining(remaining),
+                        subtitle: "Current: \(wind) — ends \(BellSchedule.formatTime(waveFour.endMinute))",
+                        tone: remaining < 5 * 60 ? .yellow : .orange
+                    )
+                }
             }
 
             // Preserve the existing behavior: when a configured class is
@@ -140,9 +180,10 @@ final class JupitrModel: NSObject, ObservableObject {
         if let lunch = lunches.first(where: {
             isWithin(seconds, startMinute: $0.info.startMinute, endMinute: $0.info.endMinute)
         }) {
+            let lunchName = lunch.wave == 0 ? "Lunch" : "Lunch Wave \(lunch.wave)"
             return ScheduleStatus(
                 timer: BellSchedule.formatRemaining(lunch.info.endMinute * 60 - seconds),
-                subtitle: "Lunch Wave \(lunch.wave)!",
+                subtitle: "\(lunchName)!",
                 tone: .yellow
             )
         }
@@ -183,7 +224,32 @@ final class JupitrModel: NSObject, ObservableObject {
             let minis = configIndex.map { _ in
                 schedule.minis(forApplicationBlockIndex: applicationIndex, dayType: dayType)
             } ?? []
-            if hasMinis, !minis.isEmpty {
+            if !BellSchedule.isAllPeriodsDay(dayType),
+               ScheduleConfig.usesWindPhysicsLunch(rawClass), configIndex == 2,
+               minis.count >= 2,
+               let waveFour = schedule.lunchInfo(wave: 4, dayType: dayType) {
+                let classParts = splitMiniClasses(rawClass)
+                items.append(ScheduleItem(
+                    startMinute: minis[1].startMinute,
+                    endMinute: minis[1].endMinute,
+                    name: "\(block.name) (\(minis[1].name))",
+                    className: classParts[safe: 1] ?? "",
+                    isLunch: false,
+                    isAfterLunch: false,
+                    isMini: true,
+                    isCurrent: isWithin(seconds, startMinute: minis[1].startMinute, endMinute: minis[1].endMinute)
+                ))
+                items.append(ScheduleItem(
+                    startMinute: waveFour.startMinute,
+                    endMinute: waveFour.endMinute,
+                    name: "\(block.name) (Wave 4)",
+                    className: classParts[safe: 0] ?? "",
+                    isLunch: false,
+                    isAfterLunch: false,
+                    isMini: false,
+                    isCurrent: isWithin(seconds, startMinute: waveFour.startMinute, endMinute: waveFour.endMinute)
+                ))
+            } else if hasMinis, !minis.isEmpty {
                 let classParts = splitMiniClasses(rawClass)
                 for (miniIndex, mini) in minis.enumerated() {
                     items.append(ScheduleItem(
@@ -193,6 +259,7 @@ final class JupitrModel: NSObject, ObservableObject {
                         className: classParts[safe: miniIndex] ?? "",
                         isLunch: false,
                         isAfterLunch: false,
+                        isMini: true,
                         isCurrent: isWithin(seconds, startMinute: mini.startMinute, endMinute: mini.endMinute)
                     ))
                 }
@@ -204,6 +271,7 @@ final class JupitrModel: NSObject, ObservableObject {
                     className: rawClass,
                     isLunch: false,
                     isAfterLunch: false,
+                    isMini: false,
                     isCurrent: isWithin(seconds, startMinute: block.startMinute, endMinute: block.endMinute)
                 ))
             }
@@ -216,6 +284,25 @@ final class JupitrModel: NSObject, ObservableObject {
                     adjusted.append(item)
                     continue
                 }
+                if !item.isMini, !lunch.info.classSegments.isEmpty {
+                    for segment in lunch.info.classSegments {
+                        let startMinute = max(item.startMinute, segment.startMinute)
+                        let endMinute = min(item.endMinute, segment.endMinute)
+                        guard startMinute < endMinute else { continue }
+
+                        adjusted.append(ScheduleItem(
+                            startMinute: startMinute,
+                            endMinute: endMinute,
+                            name: item.name,
+                            className: item.className,
+                            isLunch: false,
+                            isAfterLunch: item.startMinute < lunch.info.startMinute && startMinute >= lunch.info.endMinute,
+                            isMini: false,
+                            isCurrent: isWithin(seconds, startMinute: startMinute, endMinute: endMinute)
+                        ))
+                    }
+                    continue
+                }
                 if item.startMinute < lunch.info.startMinute {
                     adjusted.append(ScheduleItem(
                         startMinute: item.startMinute,
@@ -224,6 +311,7 @@ final class JupitrModel: NSObject, ObservableObject {
                         className: item.className,
                         isLunch: false,
                         isAfterLunch: item.isAfterLunch,
+                        isMini: item.isMini,
                         isCurrent: isWithin(seconds, startMinute: item.startMinute, endMinute: lunch.info.startMinute)
                     ))
                 }
@@ -235,6 +323,7 @@ final class JupitrModel: NSObject, ObservableObject {
                         className: item.className,
                         isLunch: false,
                         isAfterLunch: true,
+                        isMini: item.isMini,
                         isCurrent: isWithin(seconds, startMinute: lunch.info.endMinute, endMinute: item.endMinute)
                     ))
                 }
@@ -242,10 +331,11 @@ final class JupitrModel: NSObject, ObservableObject {
             adjusted.append(ScheduleItem(
                 startMinute: lunch.info.startMinute,
                 endMinute: lunch.info.endMinute,
-                name: "Lunch Wave \(lunch.wave)",
+                name: lunch.wave == 0 ? "Lunch" : "Lunch Wave \(lunch.wave)",
                 className: "",
                 isLunch: true,
                 isAfterLunch: false,
+                isMini: false,
                 isCurrent: isWithin(seconds, startMinute: lunch.info.startMinute, endMinute: lunch.info.endMinute)
             ))
             items = adjusted
@@ -339,15 +429,33 @@ final class JupitrModel: NSObject, ObservableObject {
 
     private func configuredLunches(for dayType: String) -> [ConfiguredLunch] {
         guard let dayLetter = BellSchedule.lunchDayLetter(dayType) else { return [] }
-        let waves = [config.lunchWave(for: dayLetter), config.additionalLunchWave(for: dayLetter)]
-        var seen: Set<Int> = []
-        return waves.compactMap { wave in
-            guard let wave, seen.insert(wave).inserted,
-                  let info = schedule.lunchInfo(wave: wave, dayType: dayType) else {
-                return nil
+        let blockThreeClass = config.className(for: dayLetter, blockIndex: 2)
+        if !BellSchedule.isAllPeriodsDay(dayType),
+           ScheduleConfig.usesWindPhysicsLunch(blockThreeClass) {
+            let blocks = schedule.blocks(for: dayType)
+            for applicationIndex in blocks.indices {
+                guard BellSchedule.configDayLetter(applicationBlockIndex: applicationIndex, dayType: dayType) == dayLetter,
+                      schedule.configBlockIndex(applicationBlockIndex: applicationIndex, dayType: dayType) == 2 else {
+                    continue
+                }
+
+                let minis = schedule.minis(forApplicationBlockIndex: applicationIndex, dayType: dayType)
+                guard let firstMini = minis.first else { return [] }
+                return [ConfiguredLunch(
+                    info: BellSchedule.LunchInfo(
+                        label: "Lunch",
+                        startMinute: firstMini.startMinute,
+                        endMinute: firstMini.endMinute
+                    ),
+                    wave: 0
+                )]
             }
-            return ConfiguredLunch(info: info, wave: wave)
+            return []
         }
+
+        guard let wave = config.lunchWave(for: dayLetter),
+              let info = schedule.lunchInfo(wave: wave, dayType: dayType) else { return [] }
+        return [ConfiguredLunch(info: info, wave: wave)]
     }
 
     private func className(forApplicationBlockIndex index: Int, dayType: String) -> String {

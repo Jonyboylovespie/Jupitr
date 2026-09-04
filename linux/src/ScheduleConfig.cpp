@@ -24,8 +24,6 @@ void ensureDefaults(ScheduleConfig &config)
             config.setClasses(day, {QString(), QString(), QString(), QString()});
         if (!config.lunchWaves().contains(day))
             config.setLunchWave(day, 1);
-        if (!config.additionalLunchWaves().contains(day))
-            config.setAdditionalLunchWave(day, 0);
     }
 }
 
@@ -37,7 +35,6 @@ ScheduleConfig ScheduleConfig::createDefault()
     for (const auto &day : kDayLetters) {
         config.m_classes.insert(day, {QString(), QString(), QString(), QString()});
         config.m_lunchWaves.insert(day, 1);
-        config.m_additionalLunchWaves.insert(day, 0);
     }
     return config;
 }
@@ -76,9 +73,6 @@ ScheduleConfig ScheduleConfig::load(const QString &path)
     for (auto it = lunchWaves.constBegin(); it != lunchWaves.constEnd(); ++it)
         config.m_lunchWaves.insert(it.key(), it.value().toInt(1));
 
-    const auto additionalLunchWaves = root.value(QStringLiteral("AdditionalLunchWaves")).toObject();
-    for (auto it = additionalLunchWaves.constBegin(); it != additionalLunchWaves.constEnd(); ++it)
-        config.m_additionalLunchWaves.insert(it.key(), it.value().toInt(0));
 
     ensureDefaults(config);
     return config;
@@ -106,14 +100,10 @@ bool ScheduleConfig::save(const QString &path, QString *error) const
     for (auto it = m_lunchWaves.constBegin(); it != m_lunchWaves.constEnd(); ++it)
         lunchWaves.insert(it.key(), it.value());
 
-    QJsonObject additionalLunchWaves;
-    for (auto it = m_additionalLunchWaves.constBegin(); it != m_additionalLunchWaves.constEnd(); ++it)
-        additionalLunchWaves.insert(it.key(), it.value());
 
     QJsonObject root;
     root.insert(QStringLiteral("Classes"), classes);
     root.insert(QStringLiteral("LunchWaves"), lunchWaves);
-    root.insert(QStringLiteral("AdditionalLunchWaves"), additionalLunchWaves);
 
     QSaveFile file(actualPath);
     if (!file.open(QIODevice::WriteOnly)) {
@@ -148,19 +138,12 @@ std::optional<int> ScheduleConfig::lunchWave(const QString &dayLetter) const
     return wave;
 }
 
-std::optional<int> ScheduleConfig::additionalLunchWave(const QString &dayLetter) const
+bool ScheduleConfig::usesWindPhysicsLunch(const QString &blockThreeClass)
 {
-    if (!supportsAdditionalLunch(className(dayLetter, 2)) || !m_additionalLunchWaves.contains(dayLetter))
-        return std::nullopt;
-
-    const int wave = m_additionalLunchWaves.value(dayLetter);
-    return wave >= 1 && wave <= 4 ? std::optional<int>(wave) : std::nullopt;
-}
-
-bool ScheduleConfig::supportsAdditionalLunch(const QString &blockThreeClass)
-{
-    return blockThreeClass.contains(QLatin1Char('/')) &&
-        !blockThreeClass.contains(QStringLiteral("Free"), Qt::CaseInsensitive);
+    const auto parts = blockThreeClass.split(QLatin1Char('/'));
+    return parts.size() == 2 &&
+        parts.at(0).trimmed().compare(QStringLiteral("Wind"), Qt::CaseInsensitive) == 0 &&
+        parts.at(1).trimmed().compare(QStringLiteral("Physics"), Qt::CaseInsensitive) == 0;
 }
 
 void ScheduleConfig::setClasses(const QString &dayLetter, const QStringList &classes)
@@ -171,11 +154,6 @@ void ScheduleConfig::setClasses(const QString &dayLetter, const QStringList &cla
 void ScheduleConfig::setLunchWave(const QString &dayLetter, int wave)
 {
     m_lunchWaves.insert(dayLetter, wave);
-}
-
-void ScheduleConfig::setAdditionalLunchWave(const QString &dayLetter, int wave)
-{
-    m_additionalLunchWaves.insert(dayLetter, wave);
 }
 
 } // namespace jupitr

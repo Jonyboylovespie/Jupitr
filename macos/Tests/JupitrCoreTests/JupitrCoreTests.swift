@@ -10,7 +10,19 @@ final class JupitrCoreTests: XCTestCase {
         XCTAssertEqual(regular.count, 4)
         XCTAssertEqual(regular[0].startMinute, 7 * 60 + 40)
         XCTAssertEqual(regular[0].endMinute, 9 * 60 + 6)
-        XCTAssertEqual(regular[2].startMinute, 11 * 60 + 4)
+        XCTAssertEqual(regular[2].startMinute, 10 * 60 + 48)
+        XCTAssertEqual(regular[2].endMinute, 12 * 60 + 46)
+        XCTAssertEqual(regular[3].startMinute, 12 * 60 + 54)
+
+        let waveFour = schedule.lunchInfo(wave: 4, advisory: false)
+        XCTAssertEqual(waveFour?.classSegments.count, 1)
+        XCTAssertEqual(waveFour?.classSegments.first?.startMinute, 10 * 60 + 48)
+        XCTAssertEqual(waveFour?.classSegments.first?.endMinute, 12 * 60 + 14)
+
+        let waveTwo = schedule.lunchInfo(wave: 2, advisory: false)
+        XCTAssertEqual(waveTwo?.classSegments.count, 2)
+        XCTAssertEqual(waveTwo?.classSegments.last?.startMinute, 11 * 60 + 50)
+        XCTAssertEqual(waveTwo?.classSegments.last?.endMinute, 12 * 60 + 46)
 
         let minis = schedule.minis(for: 0, advisory: false)
         XCTAssertEqual(minis.count, 2)
@@ -109,9 +121,7 @@ final class JupitrCoreTests: XCTestCase {
         config.setClass("English", for: "C", blockIndex: 1)
         config.setLunchWave(4, for: "C")
         config.setClass("Wind/Physics", for: "H", blockIndex: 2)
-        config.setAdditionalLunchWave(1, for: "H")
         config.setClass("Free/Health", for: "A", blockIndex: 2)
-        config.setAdditionalLunchWave(2, for: "A")
         try config.save(to: path)
 
         let loaded = ScheduleConfig.load(from: path)
@@ -119,10 +129,10 @@ final class JupitrCoreTests: XCTestCase {
         XCTAssertEqual(loaded.className(for: "C", blockIndex: 1), "English")
         XCTAssertEqual(loaded.lunchWave(for: "C"), 4)
         XCTAssertEqual(loaded.lunchWave(for: "A"), 1)
-        XCTAssertEqual(loaded.additionalLunchWave(for: "H"), 1)
-        XCTAssertNil(loaded.additionalLunchWave(for: "A"))
-        XCTAssertTrue(ScheduleConfig.supportsAdditionalLunch("Wind/Physics"))
-        XCTAssertFalse(ScheduleConfig.supportsAdditionalLunch("Free/Health"))
+        XCTAssertTrue(ScheduleConfig.usesWindPhysicsLunch("Wind/Physics"))
+        XCTAssertTrue(ScheduleConfig.usesWindPhysicsLunch(" wind / PHYSICS "))
+        XCTAssertFalse(ScheduleConfig.usesWindPhysicsLunch("Free/Health"))
+        XCTAssertFalse(ScheduleConfig.usesWindPhysicsLunch("Chemistry/Physics"))
     }
 
     private func date(_ year: Int, _ month: Int, _ day: Int) -> Date {

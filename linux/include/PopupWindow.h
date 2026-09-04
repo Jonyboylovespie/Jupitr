@@ -35,6 +35,7 @@ private:
         QString name;
         bool lunch = false;
         bool afterLunch = false;
+        bool mini = false;
         QString className;
     };
 

@@ -26,7 +26,21 @@ void LogicTest::scheduleUsesSharedTimes()
     QCOMPARE(regular.size(), 4);
     QCOMPARE(regular.at(0).start, QTime(7, 40));
     QCOMPARE(regular.at(0).end, QTime(9, 6));
-    QCOMPARE(regular.at(2).start, QTime(11, 4));
+    QCOMPARE(regular.at(2).start, QTime(10, 48));
+    QCOMPARE(regular.at(2).end, QTime(12, 46));
+    QCOMPARE(regular.at(3).start, QTime(12, 54));
+
+    const auto waveFour = BellSchedule::lunchInfo(4, false);
+    QVERIFY(waveFour.has_value());
+    QCOMPARE(waveFour->classSegments.size(), 1);
+    QCOMPARE(waveFour->classSegments.first().start, QTime(10, 48));
+    QCOMPARE(waveFour->classSegments.first().end, QTime(12, 14));
+
+    const auto waveTwo = BellSchedule::lunchInfo(2, false);
+    QVERIFY(waveTwo.has_value());
+    QCOMPARE(waveTwo->classSegments.size(), 2);
+    QCOMPARE(waveTwo->classSegments.last().start, QTime(11, 50));
+    QCOMPARE(waveTwo->classSegments.last().end, QTime(12, 46));
 
     const auto minis = BellSchedule::minisForBlock(0, false);
     QCOMPARE(minis.size(), 2);
@@ -129,9 +143,7 @@ void LogicTest::configurationRoundTrip()
     config.setClasses(QStringLiteral("C"), {QStringLiteral("AP Physics / Spanish"), QStringLiteral("English"), {}, QStringLiteral("Lunch")});
     config.setLunchWave(QStringLiteral("C"), 4);
     config.setClasses(QStringLiteral("H"), {QStringLiteral("Statistics"), QStringLiteral("Literature"), QStringLiteral("Wind/Physics"), QStringLiteral("Seminar")});
-    config.setAdditionalLunchWave(QStringLiteral("H"), 1);
     config.setClasses(QStringLiteral("A"), {QString(), QString(), QStringLiteral("Free/Health"), QString()});
-    config.setAdditionalLunchWave(QStringLiteral("A"), 2);
     QVERIFY(config.save(path));
 
     const auto loaded = ScheduleConfig::load(path);
@@ -139,10 +151,8 @@ void LogicTest::configurationRoundTrip()
     QCOMPARE(loaded.className(QStringLiteral("C"), 1), QStringLiteral("English"));
     QCOMPARE(loaded.lunchWave(QStringLiteral("C")).value(), 4);
     QCOMPARE(loaded.lunchWave(QStringLiteral("A")).value(), 1);
-    QCOMPARE(loaded.additionalLunchWave(QStringLiteral("H")).value(), 1);
-    QVERIFY(!loaded.additionalLunchWave(QStringLiteral("A")).has_value());
-    QVERIFY(ScheduleConfig::supportsAdditionalLunch(QStringLiteral("Wind/Physics")));
-    QVERIFY(!ScheduleConfig::supportsAdditionalLunch(QStringLiteral("Free/Health")));
+    QVERIFY(ScheduleConfig::usesWindPhysicsLunch(loaded.className(QStringLiteral("H"), 2)));
+    QVERIFY(!ScheduleConfig::usesWindPhysicsLunch(loaded.className(QStringLiteral("A"), 2)));
 }
 
 int main(int argc, char **argv)

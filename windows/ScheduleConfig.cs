@@ -6,7 +6,6 @@ public class ScheduleConfig
 {
     public Dictionary<string, List<string>> Classes { get; set; } = new();
     public Dictionary<string, int> LunchWaves { get; set; } = new();
-    public Dictionary<string, int> AdditionalLunchWaves { get; set; } = new();
 
     public int? GetLunchWave(string dayLetter)
     {
@@ -18,19 +17,16 @@ public class ScheduleConfig
         return null;
     }
 
-    public int? GetAdditionalLunchWave(string dayLetter)
+    public static bool UsesWindPhysicsLunch(string? blockThreeClass)
     {
-        if (!SupportsAdditionalLunch(GetClass(dayLetter, 2)))
-            return null;
-        if (AdditionalLunchWaves.TryGetValue(dayLetter, out var wave) && wave is >= 1 and <= 4)
-            return wave;
-        return null;
-    }
+        if (string.IsNullOrWhiteSpace(blockThreeClass))
+            return false;
 
-    public static bool SupportsAdditionalLunch(string? blockThreeClass) =>
-        !string.IsNullOrWhiteSpace(blockThreeClass) &&
-        blockThreeClass.Contains('/') &&
-        !blockThreeClass.Contains("Free", StringComparison.OrdinalIgnoreCase);
+        var parts = blockThreeClass.Split('/', 2);
+        return parts.Length == 2 &&
+               parts[0].Trim().Equals("Wind", StringComparison.OrdinalIgnoreCase) &&
+               parts[1].Trim().Equals("Physics", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static string ConfigPath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -57,7 +53,6 @@ public class ScheduleConfig
                 var cfg = JsonSerializer.Deserialize<ScheduleConfig>(json);
                 if (cfg != null && cfg.Classes != null && cfg.LunchWaves != null)
                 {
-                    cfg.AdditionalLunchWaves ??= new();
                     EnsureDays(cfg);
                     return cfg;
                 }
@@ -87,7 +82,6 @@ public class ScheduleConfig
         {
             cfg.Classes[day] = ["", "", "", ""];
             cfg.LunchWaves[day] = 1; // Default to Wave 1
-            cfg.AdditionalLunchWaves[day] = 0;
         }
         cfg.Save();
         return cfg;
@@ -101,8 +95,6 @@ public class ScheduleConfig
                 cfg.Classes[day] = ["", "", "", ""];
             if (!cfg.LunchWaves.ContainsKey(day))
                 cfg.LunchWaves[day] = 1;
-            if (!cfg.AdditionalLunchWaves.ContainsKey(day))
-                cfg.AdditionalLunchWaves[day] = 0;
         }
     }
 }
